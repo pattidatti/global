@@ -7,7 +7,7 @@
     "node": "20"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "mkdir -p data && cp ../public/geo/regions-meta.json data/regions-meta.json && tsc",
     "watch": "tsc --watch",
     "serve": "npm run build && firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",

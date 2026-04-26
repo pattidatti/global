@@ -21,6 +21,7 @@ let metaCache: Record<string, RegionMeta> | null = null;
 function getRegionMeta(): Record<string, RegionMeta> {
   if (metaCache) return metaCache;
   const candidates = [
+    path.resolve(__dirname, '../data/regions-meta.json'),
     path.resolve(__dirname, '../../public/geo/regions-meta.json'),
     path.resolve(__dirname, '../../../public/geo/regions-meta.json'),
   ];
