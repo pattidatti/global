@@ -1,0 +1,83 @@
+{
+  "rules": {
+    "serverList": {
+      ".read": "auth != null",
+      ".write": false
+    },
+
+    "games": {
+      "$gameId": {
+        ".read": "auth != null",
+
+        "meta": {
+          ".write": "auth.uid === data.child('teacherId').val()",
+          ".validate": "newData.hasChildren(['teacherId', 'status', 'schemaVersion'])"
+        },
+
+        "roster": {
+          "$slotId": {
+            ".write": "$slotId === auth.uid || auth.uid === root.child('games').child($gameId).child('meta/teacherId').val()"
+          }
+        },
+
+        "regions": {
+          ".write": false
+        },
+
+        "players": {
+          "$slotId": {
+            ".write": false,
+            "lastSeenAt": {
+              ".write": "$slotId === auth.uid",
+              ".validate": "newData.val() <= now"
+            }
+          }
+        },
+
+        "nations":    { ".write": false },
+        "wars":       { ".write": false },
+        "units":      { ".write": false },
+        "diplomacy":  { ".write": false },
+        "events":     { ".write": false },
+        "leagues":    { ".write": false },
+        "unMeetings": { ".write": false },
+
+        "markets": {
+          ".write": false,
+          "orders": {
+            "$resource": {
+              "buy": {
+                ".indexOn": ["pricePerUnit", "postedAt"]
+              },
+              "sell": {
+                ".indexOn": ["pricePerUnit", "postedAt"]
+              }
+            }
+          },
+          "priceHistory": {
+            "$resource": {
+              ".indexOn": ["ts"]
+            }
+          }
+        },
+
+        "teacher": {
+          ".write": "auth.uid === root.child('games').child($gameId).child('meta/teacherId').val()",
+          "log": {
+            ".indexOn": ["ts"]
+          }
+        },
+
+        "chat": {
+          "$channelId": {
+            "$messageId": {
+              ".write": "auth != null",
+              ".validate": "newData.hasChildren(['authorSlotId', 'text', 'sentAt']) && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 500 && newData.child('sentAt').val() <= now"
+            },
+            ".indexOn": ["sentAt"]
+          }
+        }
+      }
+    }
+  }
+}

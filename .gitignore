@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+functions/node_modules/
+functions/lib/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Playwright MCP debug output
+.playwright-mcp/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Firebase
+.firebase/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

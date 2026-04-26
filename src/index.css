@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: Lato, system-ui, sans-serif;
+  color: #2a1f12;
+  background-color: #ede2c4;
+  /* subtle paper grain on body itself; non-blocking, ~1KB inline svg */
+  background-image:
+    radial-gradient(rgba(120, 80, 30, 0.05) 1px, transparent 1px),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.16 0 0 0 0 0.12 0 0 0 0 0.07 0 0 0 0.05 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size: 6px 6px, 160px 160px;
+}
+
+/* Headings get the serif treatment automatically */
+h1, h2, h3, h4 {
+  font-family: "EB Garamond", Georgia, serif;
+  letter-spacing: 0.005em;
+}
+
+/* Leaflet overrides — sepia-tinted vintage atlas look */
+.leaflet-container {
+  background: #d9c89a;
+  font-family: Lato, system-ui, sans-serif;
+}
+.leaflet-tile-pane {
+  filter: sepia(0.55) saturate(0.75) brightness(1.04) contrast(0.95) hue-rotate(-8deg);
+}
+.leaflet-control-zoom a,
+.leaflet-control-attribution {
+  background: rgba(251, 246, 233, 0.92) !important;
+  color: #2a1f12 !important;
+  border-color: #a08562 !important;
+  font-family: Lato, system-ui, sans-serif !important;
+}
+.leaflet-control-zoom a {
+  border-radius: 6px !important;
+  font-weight: 600;
+}
+
+.region-tooltip {
+  background: #fbf6e9;
+  border: 1px solid #a08562;
+  color: #2a1f12;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(60,40,15,0.25);
+  font-family: "EB Garamond", Georgia, serif;
+}
+
+/* Focus ring — copper */
+:focus-visible {
+  outline: 2px solid #a85a2a;
+  outline-offset: 2px;
+}
+
+/* Scrollbar — sepia */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(160, 133, 98, 0.08);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(160, 133, 98, 0.55);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(160, 133, 98, 0.8);
+}
+
+/* Reusable parchment surface utility — slight grain + warm shadow */
+.parchment {
+  background-color: #fbf6e9;
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.30 0 0 0 0 0.20 0 0 0 0 0.10 0 0 0 0.08 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* Soft hover-lift for cards */
+.lift-on-hover {
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+.lift-on-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(60,40,15,0.18), 0 10px 30px rgba(60,40,15,0.18);
+}
