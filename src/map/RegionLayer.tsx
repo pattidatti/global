@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { useGameStore } from '../game/store';
@@ -174,66 +174,110 @@ export function RegionLayer({ geojson, adjacency = {}, onRegionClick, mapMode, r
   }, [map, geojson]);
 
   // Pulserende rød animasjon for omstridte regioner
+  const contestedIdsRef = useRef<string[]>([]);
+
   useEffect(() => {
-    const contestedIds = Object.entries(regions)
+    contestedIdsRef.current = Object.entries(regions)
       .filter(([, r]) => r.contestedAt != null)
       .map(([id]) => id);
-    if (contestedIds.length === 0) return;
+  }, [regions]);
 
+  useEffect(() => {
     const id = setInterval(() => {
+      if (contestedIdsRef.current.length === 0) return;
       const t = Date.now() / 600;
       const opacity = 0.35 + 0.4 * Math.abs(Math.sin(t));
-      for (const rid of contestedIds) {
-        const lyr = layerMapRef.current.get(rid);
-        if (lyr) lyr.setStyle({ fillOpacity: opacity });
+      for (const rid of contestedIdsRef.current) {
+        layerMapRef.current.get(rid)?.setStyle({ fillOpacity: opacity });
       }
     }, 100);
     return () => clearInterval(id);
-  }, [regions]);
+  }, []);
 
-  const styleSignature = useMemo(() => {
-    const parts: string[] = [];
-    for (const [id, r] of Object.entries(regions)) {
-      parts.push(
-        `${id}:${r.ownerId ?? ''}:${Math.floor(r.integration ?? 0)}:${r.integrationStartedAt ?? ''}:${r.contestedAt ?? ''}:${r.nationId ?? ''}`,
-      );
-    }
-    return parts.join('|');
-  }, [regions]);
+  // Refs for å detektere hva som faktisk endret seg
+  const prevRegionsRef = useRef<Record<string, Region>>({});
+  const prevSelectedRef = useRef<string | null>(null);
+  const prevMapModeRef = useRef<MapMode>(mapMode ?? 'region');
 
-  // Batched stil-oppdatering ved data-endringer
+  // Målrettet stil-oppdatering — kun endrede regioner får setStyle
   useEffect(() => {
     if (!layerRef.current) return;
 
-    const neighborIds = selectedRegionId ? new Set(adjacency[selectedRegionId] ?? []) : new Set<string>();
+    const prev = prevRegionsRef.current;
+    const prevSelected = prevSelectedRef.current;
+    const currentMode = mapMode ?? 'region';
+    const modeChanged = prevMapModeRef.current !== currentMode;
 
-    layerMapRef.current.forEach((lyr, regionId) => {
-      const region = regions[regionId];
+    prevRegionsRef.current = regions;
+    prevSelectedRef.current = selectedRegionId ?? null;
+    prevMapModeRef.current = currentMode;
 
+    const neighborIds = selectedRegionId
+      ? new Set(adjacency[selectedRegionId] ?? [])
+      : new Set<string>();
+
+    const applyStyle = (regionId: string) => {
+      const lyr = layerMapRef.current.get(regionId);
+      if (!lyr) return;
       if (neighborIds.has(regionId)) {
         lyr.setStyle(regionPathOptions('neighbor'));
         return;
       }
-
+      const region = regions[regionId];
       const state = getState(regionId, region);
       const empireColor = getEmpireColor(region);
       const nationOverlay = getNationOverlay(region);
-
       const baseStyle = regionPathOptions(state, empireColor);
       baseStyle.fillColor = getFillColor(regionId, region, state, empireColor);
-
       let fillOpacity: number | undefined;
       if (region?.ownerId === slotId && region.integrationStartedAt !== null) {
         fillOpacity = 0.55 + (region.integration / 100) * 0.37;
       }
-
       lyr.setStyle({
         ...baseStyle,
         ...(fillOpacity !== undefined ? { fillOpacity } : {}),
         ...(nationOverlay ?? {}),
       });
-    });
-  }, [styleSignature, slotId, selectedRegionId, adjacency, nations, mapMode, regionColors]); // eslint-disable-line react-hooks/exhaustive-deps
+    };
+
+    if (modeChanged) {
+      layerMapRef.current.forEach((_, id) => applyStyle(id));
+      return;
+    }
+
+    const toUpdate = new Set<string>();
+
+    for (const id of Object.keys(regions)) {
+      const r = regions[id];
+      const p = prev[id];
+      if (
+        !p ||
+        p.ownerId !== r.ownerId ||
+        p.integration !== r.integration ||
+        p.nationId !== r.nationId ||
+        p.contestedAt !== r.contestedAt ||
+        p.integrationStartedAt !== r.integrationStartedAt
+      ) {
+        toUpdate.add(id);
+      }
+    }
+    for (const id of Object.keys(prev)) {
+      if (!regions[id]) toUpdate.add(id);
+    }
+
+    if (prevSelected !== (selectedRegionId ?? null)) {
+      if (prevSelected) {
+        toUpdate.add(prevSelected);
+        (adjacency[prevSelected] ?? []).forEach(id => toUpdate.add(id));
+      }
+      if (selectedRegionId) {
+        toUpdate.add(selectedRegionId);
+        (adjacency[selectedRegionId] ?? []).forEach(id => toUpdate.add(id));
+      }
+    }
+
+    toUpdate.forEach(applyStyle);
+  }, [regions, slotId, selectedRegionId, adjacency, nations, mapMode, regionColors]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return null;
 }

@@ -79,6 +79,7 @@ interface JoinGameRequest {
 interface JoinGameData {
   gameId: string;
   slotId: string;
+  hasPickedRegion: boolean;
 }
 
 export const joinGame = functions.onCall<
@@ -112,6 +113,9 @@ export const joinGame = functions.onCall<
     if (isRejoin) {
       await db.ref(`games/${gameId}/roster/${slotId}`).update({ joinedAt: now });
       await db.ref(`games/${gameId}/players/${slotId}`).update({ lastSeenAt: now });
+      const regionIdsSnap = await db.ref(`games/${gameId}/players/${slotId}/regionIds`).once('value');
+      const regionIds: string[] = regionIdsSnap.val() ?? [];
+      return { ok: true, data: { gameId, slotId, hasPickedRegion: regionIds.length > 0 } };
     } else {
       const slot: RosterSlot = {
         displayName,
@@ -139,7 +143,7 @@ export const joinGame = functions.onCall<
       );
     }
 
-    return { ok: true, data: { gameId, slotId } };
+    return { ok: true, data: { gameId, slotId, hasPickedRegion: false } };
   },
 );
 

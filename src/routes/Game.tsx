@@ -22,8 +22,8 @@ import {
   subscribeToDiplomacy,
   subscribeToWars,
   subscribeToUnits,
-  subscribeToSchemaVersion,
 } from '../firebase/db';
+import { EXPECTED_SCHEMA_VERSION } from '../constants';
 
 export function Game() {
   const navigate = useNavigate();
@@ -57,7 +57,10 @@ export function Game() {
     if (!authChecked || !gameId || !slotId) return;
 
     const unsubMeta = subscribeToGameMeta(gameId, meta => {
-      if (meta) setMeta(meta);
+      if (meta) {
+        setMeta(meta);
+        setSchemaVersionMismatch((meta.schemaVersion ?? 1) > EXPECTED_SCHEMA_VERSION);
+      }
     });
     const unsubPlayer = subscribeToPlayer(gameId, slotId, player => {
       if (player) updatePlayer(slotId, player);
@@ -77,10 +80,6 @@ export function Game() {
     const unsubUnits = subscribeToUnits(gameId, units => {
       setUnits(units ?? {});
     });
-    const unsubSchema = subscribeToSchemaVersion(gameId, mismatch => {
-      setSchemaVersionMismatch(mismatch);
-    });
-
     return () => {
       unsubMeta();
       unsubPlayer();
@@ -89,7 +88,6 @@ export function Game() {
       unsubDiplomacy();
       unsubWars();
       unsubUnits();
-      unsubSchema();
     };
   }, [authChecked, gameId, slotId, setMeta, updatePlayer, setRegions, setNations, setDiplomacy, setWars, setUnits, setSchemaVersionMismatch]);
 

@@ -16,7 +16,6 @@ import type { ChatMessage } from '../types/chat';
 import type { War, Unit } from '../types/war';
 import type { League } from '../types/league';
 import type { UnMeeting } from '../types/un';
-import { EXPECTED_SCHEMA_VERSION } from '../constants';
 
 export const db = getDatabase(firebaseApp);
 
@@ -196,19 +195,3 @@ export function subscribeToServerList(
   return () => off(r);
 }
 
-/**
- * Abonnerer på schemaVersion og kaller cb(true) hvis versjonen er nyere
- * enn klient-konstanten. Klienten skal da vise en "last inn på nytt"-banner.
- */
-export function subscribeToSchemaVersion(
-  gameId: string,
-  cb: (mismatch: boolean) => void,
-): () => void {
-  const r: DatabaseReference = ref(db, paths.gameMeta(gameId));
-  onValue(r, snap => {
-    const meta = snap.val() as { schemaVersion?: number } | null;
-    const serverVersion = meta?.schemaVersion ?? 1;
-    cb(serverVersion > EXPECTED_SCHEMA_VERSION);
-  });
-  return () => off(r);
-}

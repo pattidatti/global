@@ -1,18 +1,21 @@
+import { useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useGameStore } from './store';
 import type { Region } from '../types/region';
 import type { Player } from '../types/player';
 
 export function useMyPlayer(): Player | null {
-  const { players, slotId } = useGameStore();
-  if (!slotId) return null;
-  return players[slotId] ?? null;
+  return useGameStore(s => (!s.slotId ? null : (s.players[s.slotId] ?? null)));
 }
 
 export function useMyRegions(): Record<string, Region> {
-  const { regions, slotId } = useGameStore();
-  if (!slotId) return {};
-  return Object.fromEntries(
-    Object.entries(regions).filter(([, r]) => r.ownerId === slotId),
+  return useGameStore(
+    useShallow((s) => {
+      if (!s.slotId) return {};
+      return Object.fromEntries(
+        Object.entries(s.regions).filter(([, r]) => r.ownerId === s.slotId),
+      );
+    }),
   );
 }
 
@@ -35,22 +38,27 @@ export function usePlayerById(slotId: string): Player | null {
 }
 
 export function useNationRegions(nationId: string): Record<string, Region> {
-  const { regions } = useGameStore();
-  return Object.fromEntries(
-    Object.entries(regions).filter(([, r]) => r.nationId === nationId),
+  return useGameStore(
+    useShallow((s) =>
+      Object.fromEntries(
+        Object.entries(s.regions).filter(([, r]) => r.nationId === nationId),
+      ),
+    ),
   );
 }
 
 /** Aggregerer ressurser på tvers av alle egne regioner */
 export function useTotalResources(): Record<string, number> {
   const myRegions = useMyRegions();
-  const totals: Record<string, number> = {};
-  for (const region of Object.values(myRegions)) {
-    for (const [res, amount] of Object.entries(region.resources ?? {})) {
-      totals[res] = (totals[res] ?? 0) + (amount ?? 0);
+  return useMemo(() => {
+    const totals: Record<string, number> = {};
+    for (const region of Object.values(myRegions)) {
+      for (const [res, amount] of Object.entries(region.resources ?? {})) {
+        totals[res] = (totals[res] ?? 0) + (amount ?? 0);
+      }
     }
-  }
-  return totals;
+    return totals;
+  }, [myRegions]);
 }
 
 /**
