@@ -5,7 +5,7 @@ import {
   tickIntegration,
   tickSatisfaction,
   tickPopulation,
-} from '../tick';
+} from '../tick-logic';
 import type { Region, Building } from '../types';
 
 function makeRegion(overrides: Partial<Region> = {}): Region {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BUILDING_DEFS } from '../buildings';
+import { BUILDING_DEFS } from '../buildings-logic';
 
 // Disse testene verifiserer bygningskonfigurasjonen og routing-logikk
 // uten å trenge Firebase-emulator.
