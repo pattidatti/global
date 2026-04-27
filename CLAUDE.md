@@ -16,6 +16,12 @@ npm run build:adjacency  # Generer adjacency.json
 npm run seed             # Populer emulator/RTDB med NPC-regioner
 ```
 
+Deploy Cloud Functions etter endringer (Claude gjør dette, ikke brukeren):
+```bash
+cd functions && npm run build   # kompiler + kopier regions-meta.json til functions/data/
+firebase deploy --only functions
+```
+
 Firebase-emulatorene:
 ```bash
 firebase emulators:start          # Kjør alle emulatorer (Auth, RTDB, Functions)

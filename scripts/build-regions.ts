@@ -39,7 +39,7 @@ const COUNTRIES_CACHE_PATH = path.join(ROOT, 'data', 'ne_admin0_countries.geojso
 // ISO-koder som har admin-1-dekning fra det lille datasettet (de 9 største landene)
 const ADMIN1_ISOS = new Set(['AUS', 'BRA', 'CAN', 'CHN', 'IDN', 'IND', 'RUS', 'USA', 'ZAF']);
 
-// Europeiske og nærliggende land som skal bruke provinsnivå fra det fulle datasettet
+// Land som skal bruke provinsnivå fra det fulle admin-1-datasettet
 const EUROPEAN_ISOS = new Set([
   'NOR', 'SWE', 'DNK', 'FIN', 'ISL',
   'DEU', 'AUT', 'CHE',
@@ -52,6 +52,8 @@ const EUROPEAN_ISOS = new Set([
   'SVN', 'HRV', 'BIH', 'SRB', 'MNE', 'ALB', 'MKD', 'GRC', 'CYP',
   'EST', 'LVA', 'LTU',
   'TUR', 'GEO', 'ARM', 'AZE',
+  // Øst-Asia og Midtøsten — provinsnivå for tilstrekkelig kulturgruppe-dekning
+  'JPN', 'KOR', 'PRK', 'IRN',
 ]);
 
 // Maks antall provinser per land for europeiske land (hindrer 96 franske departmenter)
