@@ -6,7 +6,56 @@ import { BuildingPanel } from '../building/BuildingPanel';
 import { ExpandButton } from '../expansion/ExpandButton';
 import { NpcInfluencePanel } from '../expansion/NpcInfluencePanel';
 import { EXPAND_MILITARY_COST } from '../../constants';
-import type { GeoJsonMeta } from '../../types/region';
+import type { GeoJsonMeta, Region } from '../../types/region';
+
+const DEFECTION_STREAK_MAX = 5;
+
+function NpcProgressPanel({ region, slotId }: { region: Region; slotId: string }) {
+  const bond = region.tradeBond?.[slotId] ?? 0;
+  const streak = region.defectionStreak?.[slotId] ?? 0;
+  if (bond === 0 && streak === 0) return null;
+
+  const bondPct = Math.round(bond * 100);
+  const streakPct = Math.round((streak / DEFECTION_STREAK_MAX) * 100);
+
+  return (
+    <Panel title="Din fremgang">
+      <div className="space-y-2 text-xs">
+        {bond > 0 && (
+          <div>
+            <div className="flex justify-between text-textLo mb-0.5">
+              <span>💰 Handelsbånd</span>
+              <span className="font-mono text-textHi">{bondPct}%</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-panelEdge overflow-hidden">
+              <div
+                className="h-full rounded-full bg-good transition-all"
+                style={{ width: `${bondPct}%` }}
+              />
+            </div>
+          </div>
+        )}
+        {streak > 0 && (
+          <div>
+            <div className="flex justify-between text-textLo mb-0.5">
+              <span>🤝 Lojalitetstreak</span>
+              <span className="font-mono text-textHi">{streak}/{DEFECTION_STREAK_MAX} tikk</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-panelEdge overflow-hidden">
+              <div
+                className="h-full rounded-full bg-accent transition-all"
+                style={{ width: `${streakPct}%` }}
+              />
+            </div>
+            {streak >= DEFECTION_STREAK_MAX - 1 && (
+              <p className="text-good mt-0.5">Neste tikk tilslutter regionen seg!</p>
+            )}
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
 
 const BIOME_LABELS: Record<string, { icon: string; name: string }> = {
   plains:   { icon: '🌿', name: 'Slette' },
@@ -80,20 +129,21 @@ export function KontekstPanel({ adjacency, geojsonMeta }: KontekstPanelProps) {
           </Panel>
         )}
 
-        {ownsNeighbor && hasMilitaryForExpansion && !!gameId && (
-          <Panel title="Klar til ekspansjon">
-            <p className="text-xs text-textLo leading-relaxed">
-              Du grenser mot denne regionen. Bruk militærmakt, invester penger,
-              eller prøv diplomatisk overtakelse.
-            </p>
-          </Panel>
+        {ownsNeighbor && !!gameId && (
+          <div className="space-y-2">
+            <div className="px-1">
+              <ExpandButton targetRegionId={selectedRegionId} gameId={gameId} />
+            </div>
+            <NpcInfluencePanel targetRegionId={selectedRegionId} gameId={gameId} />
+          </div>
         )}
       </div>
     );
   }
 
   const isMyRegion = region.ownerId === slotId;
-  const isNPC = region.ownerId === null;
+  // ownerId can be undefined for partially-created RTDB nodes (e.g. after invest on unseeded region)
+  const isNPC = region.ownerId == null;
   const ownerPlayer = region.ownerId ? players[region.ownerId] : null;
   const biome = BIOME_LABELS[region.biome ?? 'other'] ?? BIOME_LABELS.other;
   const meta = geojsonMeta[selectedRegionId];
@@ -178,6 +228,11 @@ export function KontekstPanel({ adjacency, geojsonMeta }: KontekstPanelProps) {
             ))}
           </div>
         </Panel>
+      )}
+
+      {/* NPC-fremgang: investering og lojalitetstreak */}
+      {canExpand && slotId && (
+        <NpcProgressPanel region={region} slotId={slotId} />
       )}
 
       {/* NPC-naboregion: ekspander-knapp + diplomati/invester */}

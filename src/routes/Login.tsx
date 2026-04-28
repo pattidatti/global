@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { signInWithGoogle, onAuthChange } from '../firebase/auth';
+import { signInWithGoogle, signInAnon, onAuthChange } from '../firebase/auth';
 import { CompassRoseSVG } from '../ui/CompassRoseSVG';
 
 function FeaturePillar({
@@ -42,6 +42,19 @@ export function Login() {
       navigate('/servers');
     } catch {
       setError('Pålogging mislyktes. Prøv igjen.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDevLogin() {
+    setLoading(true);
+    setError(null);
+    try {
+      await signInAnon();
+      navigate('/servers');
+    } catch {
+      setError('Dev-pålogging mislyktes.');
     } finally {
       setLoading(false);
     }
@@ -123,6 +136,17 @@ export function Login() {
           >
             {loading ? 'Logger inn …' : 'Logg inn med Google'}
           </button>
+
+          {import.meta.env.DEV && (
+            <button
+              onClick={() => void handleDevLogin()}
+              disabled={loading}
+              data-testid="dev-login"
+              className="w-full bg-warn/20 text-warn border border-warn/40 font-serif text-sm tracking-wide py-2 rounded-paper hover:bg-warn/30 disabled:opacity-50 transition-all"
+            >
+              Dev: Spill som anonym
+            </button>
+          )}
 
           <div className="text-center pt-2 border-t border-panelEdge/30">
             <Link

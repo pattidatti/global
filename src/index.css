@@ -29,35 +29,10 @@ h1, h2, h3, h4 {
   letter-spacing: 0.005em;
 }
 
-/* Leaflet overrides — sepia-tinted vintage atlas look */
-.leaflet-container {
-  background: #d9c89a;
-  font-family: Lato, system-ui, sans-serif;
-}
-.leaflet-tile-pane {
-  filter: sepia(0.55) saturate(0.75) brightness(1.04) contrast(0.95) hue-rotate(-8deg);
-}
-.leaflet-control-zoom a,
-.leaflet-control-attribution {
-  background: rgba(251, 246, 233, 0.92) !important;
-  color: #2a1f12 !important;
-  border-color: #a08562 !important;
-  font-family: Lato, system-ui, sans-serif !important;
-}
-.leaflet-control-zoom a {
-  border-radius: 6px !important;
-  font-weight: 600;
-}
-
-.region-tooltip {
-  background: #fbf6e9;
-  border: 1px solid #a08562;
-  color: #2a1f12;
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(60,40,15,0.25);
-  font-family: "EB Garamond", Georgia, serif;
+/* PixiJS canvas — ensure sharp rendering */
+canvas {
+  display: block;
+  image-rendering: pixelated;
 }
 
 /* Focus ring — copper */

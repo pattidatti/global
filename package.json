@@ -13,16 +13,17 @@
     "type-check": "tsc --noEmit",
     "build:regions": "npx tsx scripts/build-regions.ts",
     "build:adjacency": "npx tsx scripts/compute-adjacency.ts",
-    "seed": "npx tsx scripts/seed-firebase.ts"
+    "seed": "npx tsx scripts/seed-firebase.ts",
+    "play": "npx tsx scripts/play.ts"
   },
   "dependencies": {
     "firebase": "^11.0.0",
-    "leaflet": "^1.9.4",
     "lucide-react": "^1.11.0",
+    "pixi-viewport": "^6.0.3",
+    "pixi.js": "^8.18.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-force-graph-2d": "^1.29.1",
-    "react-leaflet": "^4.2.1",
     "react-router-dom": "^6.28.0",
     "recharts": "^3.8.1",
     "zustand": "^5.0.0"
@@ -32,7 +33,6 @@
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/react": "^16.0.0",
     "@turf/turf": "^7.3.5",
-    "@types/leaflet": "^1.9.14",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",
@@ -42,6 +42,7 @@
     "eslint-plugin-react-refresh": "^0.4.0",
     "globals": "^15.0.0",
     "jsdom": "^25.0.0",
+    "playwright": "^1.59.1",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
     "tsx": "^4.21.0",

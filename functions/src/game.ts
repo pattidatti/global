@@ -1,6 +1,6 @@
 import * as functions from 'firebase-functions/v2/https';
 import { db } from './_db';
-import { getRegionDefaults } from './_seed';
+import { getRegionDefaults, getAllRegionDefaults } from './_seed';
 import { M } from './messages';
 import type { GameMeta, RosterSlot, Player, CallableResult } from './types';
 
@@ -57,6 +57,19 @@ export const createGame = functions.onCall<
     };
 
     await db.ref(`games/${gameId}`).set({ meta });
+
+    // Seed alle NPC-regioner slik at macroTick har noe å iterere over fra dag én
+    const allRegions = getAllRegionDefaults(now);
+    const BATCH = 500;
+    const entries = Object.entries(allRegions);
+    for (let i = 0; i < entries.length; i += BATCH) {
+      const update: Record<string, unknown> = {};
+      for (const [regionId, defaults] of entries.slice(i, i + BATCH)) {
+        update[`games/${gameId}/regions/${regionId}`] = defaults;
+      }
+      await db.ref().update(update);
+    }
+
     await db.ref(`serverList/${gameId}`).set({
       name: serverName,
       teacherName,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { onAuthChange } from '../firebase/auth';
 import { ref, set } from 'firebase/database';
@@ -12,6 +12,7 @@ import { DiplomacyScreen } from '../screens/DiplomacyScreen';
 import { WarScreen } from '../screens/WarScreen';
 import { EventsScreen } from '../screens/EventsScreen';
 import { UnMeetingModal } from '../features/un/UnMeetingModal';
+import { DevPanel } from '../ui/DevPanel';
 import { useGameStore } from '../game/store';
 import {
   db,
@@ -22,12 +23,14 @@ import {
   subscribeToDiplomacy,
   subscribeToWars,
   subscribeToUnits,
+  subscribeToChat,
 } from '../firebase/db';
 import { EXPECTED_SCHEMA_VERSION } from '../constants';
 
 export function Game() {
   const navigate = useNavigate();
   const [authChecked, setAuthChecked] = useState(false);
+  const latestChatIdRef = useRef<string | null>(null);
   const {
     gameId,
     slotId,
@@ -40,6 +43,7 @@ export function Game() {
     setWars,
     setUnits,
     setSchemaVersionMismatch,
+    setUnreadChat,
     schemaVersionMismatch,
   } = useGameStore();
 
@@ -97,6 +101,28 @@ export function Game() {
     }
   }, [authChecked, gameId, slotId, navigate]);
 
+  // Global chat — sett ulest-indikator når nye meldinger ankommer og brukeren ikke er på Diplomati
+  useEffect(() => {
+    if (!authChecked || !gameId || !slotId) return;
+    return subscribeToChat(gameId, 'global', msgs => {
+      if (!msgs) return;
+      const entries = Object.entries(msgs).sort((a, b) => a[1].sentAt - b[1].sentAt);
+      const latest = entries[entries.length - 1];
+      if (!latest) return;
+      const [latestId, latestMsg] = latest;
+      if (latestChatIdRef.current === null) {
+        latestChatIdRef.current = latestId;
+        return;
+      }
+      if (latestId !== latestChatIdRef.current) {
+        latestChatIdRef.current = latestId;
+        if (latestMsg.authorSlotId !== slotId && useGameStore.getState().activeScreen !== 'diplomacy') {
+          setUnreadChat(true);
+        }
+      }
+    });
+  }, [authChecked, gameId, slotId, setUnreadChat]);
+
   // Presence heartbeat — oppdater lastSeenAt hvert 30. sekund
   useEffect(() => {
     if (!gameId || !slotId) return;
@@ -135,6 +161,8 @@ export function Game() {
       <BottomNav />
 
       <UnMeetingModal />
+
+      {import.meta.env.DEV && <DevPanel />}
     </div>
   );
 }

@@ -1,283 +1,276 @@
 import { useEffect, useRef } from 'react';
-import { useMap } from 'react-leaflet';
-import L from 'leaflet';
 import { useGameStore } from '../game/store';
-import { regionPathOptions } from './styles';
 import type { Region } from '../types/region';
 import type { MapMode } from './MapModeControl';
+import type { RegionGraphicsLayer, RegionStyle } from './RegionGraphicsLayer';
 
 // Victoria 3-inspirert politisk kart-palett per kulturgruppe
-const NPC_GROUP_COLORS: Record<string, string> = {
-  'nordic':        '#7fbcd2',
-  'germanic':      '#a8b8c8',
-  'anglo':         '#5a9eb8',
-  'slavic':        '#8ab87a',
-  'latin':         '#e8c87a',
-  'mediterranean': '#e0a870',
-  'arabic':        '#d4b870',
-  'north-african': '#d8c060',
-  'sub-saharan':   '#9ac870',
-  'ethiopian':     '#78b890',
-  'sinitic':       '#d87070',
-  'indochinese':   '#e8a070',
-  'malay':         '#d8a860',
-  'japanic':       '#e890a0',
-  'korean':        '#a890c8',
-  'indic':         '#e8d060',
-  'persian':       '#b89050',
-  'central-asian': '#a8b898',
-  'turkic':        '#60b898',
-  'andean':        '#9070b8',
-  'polynesian':    '#60a8c0',
-  'other':         '#a8a898',
+const NPC_GROUP_COLORS: Record<string, number> = {
+  'nordic':        0x7fbcd2,
+  'germanic':      0xa8b8c8,
+  'anglo':         0x5a9eb8,
+  'slavic':        0x8ab87a,
+  'latin':         0xe8c87a,
+  'mediterranean': 0xe0a870,
+  'arabic':        0xd4b870,
+  'north-african': 0xd8c060,
+  'sub-saharan':   0x9ac870,
+  'ethiopian':     0x78b890,
+  'sinitic':       0xd87070,
+  'indochinese':   0xe8a070,
+  'malay':         0xd8a860,
+  'japanic':       0xe890a0,
+  'korean':        0xa890c8,
+  'indic':         0xe8d060,
+  'persian':       0xb89050,
+  'central-asian': 0xa8b898,
+  'turkic':        0x60b898,
+  'andean':        0x9070b8,
+  'polynesian':    0x60a8c0,
+  'other':         0xa8a898,
 };
 
-interface RegionFeature extends GeoJSON.Feature<GeoJSON.Geometry> {
-  properties: {
-    regionId: string;
-    culturalGroup?: string;
-    name?: string;
-    biome?: string;
-  };
+const GOOD_HEX = 0x3f6b3f;
+const DANGER_HEX = 0x9a2a2a;
+
+function cssToHex(css: string): number {
+  return parseInt(css.replace('#', ''), 16);
 }
 
-interface RegionLayerProps {
-  geojson: GeoJSON.FeatureCollection;
-  adjacency?: Record<string, string[]>;
-  onRegionClick?: (regionId: string) => void;
-  mapMode?: MapMode;
-  regionColors?: Record<string, string>;
+function getNpcColor(culturalGroup: string | undefined, regionId: string, culturalGroupCache: Map<string, string>): number {
+  const group = culturalGroup ?? culturalGroupCache.get(regionId) ?? 'other';
+  return NPC_GROUP_COLORS[group] ?? NPC_GROUP_COLORS.other;
 }
 
-export function RegionLayer({ geojson, adjacency = {}, onRegionClick, mapMode, regionColors }: RegionLayerProps) {
-  const map = useMap();
-  const layerRef = useRef<L.GeoJSON | null>(null);
-  const layerMapRef = useRef<Map<string, L.Path>>(new Map());
-  // Lagrer kulturgruppe per regionId fra GeoJSON-properties (satt under onEachFeature)
-  const culturalGroupRef = useRef<Map<string, string>>(new Map());
-  const mapModeRef = useRef<MapMode>(mapMode ?? 'region');
-  mapModeRef.current = mapMode ?? 'region';
-  const regionColorsRef = useRef<Record<string, string>>(regionColors ?? {});
-  regionColorsRef.current = regionColors ?? {};
-  const { regions, slotId, selectedRegionId, nations } = useGameStore();
-
-  function getState(_regionId: string, region: Region | undefined) {
-    if (!region) return 'npc' as const;
-    if (region.contestedAt) return 'contested' as const;
-    if (region.ownerId === slotId) return 'mine' as const;
-    if (region.ownerId) return 'owned' as const;
-    return 'npc' as const;
-  }
-
-  function getEmpireColor(region: Region | undefined): string | undefined {
-    if (!region?.ownerId) return undefined;
-    const { players } = useGameStore.getState();
-    return players[region.ownerId]?.empireColor;
-  }
-
-  function getNationOverlay(region: Region | undefined): { color: string; weight: number } | null {
-    if (!region?.nationId) return null;
-    const nation = nations[region.nationId];
-    if (!nation) return null;
-    return { color: nation.color, weight: 2.5 };
-  }
-
-  function getIntegrationColor(region: Region, empireColor: string): string {
-    if (region.integration >= 100 || !region.integrationStartedAt) return empireColor;
-    void (region.integration / 100);
-    return empireColor;
-  }
-
-  // Slår opp kulturgruppe-farge for NPC-regioner
-  function getNpcFillColor(regionId: string, region: Region | undefined): string {
-    const group = region?.culturalGroup ?? culturalGroupRef.current.get(regionId);
-    return NPC_GROUP_COLORS[group ?? 'other'] ?? NPC_GROUP_COLORS.other;
-  }
-
-  // Returnerer fyllfarge basert på aktiv kartmodus
-  function getFillColor(
-    regionId: string,
-    region: Region | undefined,
-    state: ReturnType<typeof getState>,
-    empireColor: string | undefined,
-  ): string {
-    const mode = mapModeRef.current;
-    const isOwned = state === 'mine' || state === 'owned';
-
-    if (mode === 'culture') {
-      return getNpcFillColor(regionId, region);
-    }
-    if (mode === 'empire' || mode === 'region') {
-      if (isOwned && empireColor) return empireColor;
-      if (mode === 'region') {
-        return regionColorsRef.current[regionId] ?? getNpcFillColor(regionId, region);
-      }
-      return getNpcFillColor(regionId, region);
-    }
-    return getNpcFillColor(regionId, region);
-  }
+export function useRegionLayer(
+  layerRef: React.RefObject<RegionGraphicsLayer | null>,
+  adjacency: Record<string, string[]>,
+  mapMode: MapMode | undefined,
+  regionColors: Record<string, string> | undefined,
+): void {
+  const store = useGameStore;
+  const prevRegionsRef = useRef<Record<string, Region>>({});
+  const prevSelectedRef = useRef<string | null>(null);
+  const prevModeRef = useRef<MapMode>(mapMode ?? 'region');
+  const culturalGroupCacheRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
-    const canvas = L.canvas();
-    const layerMap = layerMapRef.current;
-    layerMap.clear();
-    culturalGroupRef.current.clear();
+    const applyAll = () => {
+      const { regions, slotId, selectedRegionId, nations, players } = store.getState();
+      const layer = layerRef.current;
+      if (!layer) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const options: any = {
-      renderer: canvas,
-      style: (feature: GeoJSON.Feature | undefined) => {
-        const f = feature as RegionFeature;
-        const regionId = f.properties.regionId;
+      const currentMode = mapMode ?? 'region';
+      const neighborIds = selectedRegionId ? new Set(adjacency[selectedRegionId] ?? []) : new Set<string>();
+
+      const computeStyle = (regionId: string): RegionStyle => {
         const region = regions[regionId];
-        const state = getState(regionId, region);
-        const empireColor = getEmpireColor(region);
-        const nationOverlay = getNationOverlay(region);
 
-        const resolvedEmpire = empireColor ? getIntegrationColor(region!, empireColor) : empireColor;
-        const baseStyle = regionPathOptions(state, resolvedEmpire);
-        baseStyle.fillColor = getFillColor(regionId, region, state, resolvedEmpire);
-
-        let fillOpacity: number | undefined;
-        if (region?.ownerId === slotId && region.integrationStartedAt !== null) {
-          fillOpacity = 0.55 + (region.integration / 100) * 0.37;
+        if (neighborIds.has(regionId) && regionId !== selectedRegionId) {
+          return {
+            fillColor: GOOD_HEX,
+            fillAlpha: 0.25,
+            borderColor: GOOD_HEX,
+            borderWidth: 1.5,
+            isSelected: false,
+            isNeighbor: true,
+            isContested: false,
+          };
         }
 
-        return {
-          ...baseStyle,
-          ...(fillOpacity !== undefined ? { fillOpacity } : {}),
-          ...(nationOverlay ?? {}),
-        };
-      },
-      onEachFeature: (feature: GeoJSON.Feature, lyr: L.Layer) => {
-        const f = feature as RegionFeature;
-        const regionId = f.properties.regionId;
-        // Lagre kulturgruppe for bruk i style-oppdateringer
-        if (f.properties.culturalGroup) {
-          culturalGroupRef.current.set(regionId, f.properties.culturalGroup);
+        const state = !region
+          ? 'npc'
+          : region.contestedAt ? 'contested'
+          : region.ownerId === slotId ? 'mine'
+          : region.ownerId ? 'owned'
+          : 'npc';
+
+        const isContested = state === 'contested';
+        const empireColor = region?.ownerId ? players[region.ownerId]?.empireColor : undefined;
+        const nation = region?.nationId ? nations[region.nationId] : undefined;
+
+        let fillColor: number;
+        const isOwned = state === 'mine' || state === 'owned';
+
+        if (currentMode === 'culture') {
+          fillColor = getNpcColor(region?.culturalGroup, regionId, culturalGroupCacheRef.current);
+        } else if (currentMode === 'empire') {
+          fillColor = isOwned && empireColor ? cssToHex(empireColor) : getNpcColor(region?.culturalGroup, regionId, culturalGroupCacheRef.current);
+        } else {
+          // 'region' mode
+          if (isOwned && empireColor) {
+            fillColor = cssToHex(empireColor);
+          } else {
+            const graphColor = regionColors?.[regionId];
+            fillColor = graphColor ? cssToHex(graphColor) : getNpcColor(region?.culturalGroup, regionId, culturalGroupCacheRef.current);
+          }
         }
-        lyr.on('click', () => onRegionClick?.(regionId));
-        (lyr as L.Path).bindTooltip(f.properties.name ?? regionId, { sticky: true, className: 'region-tooltip' });
-        layerMapRef.current.set(regionId, lyr as L.Path);
-      },
+
+        if (isContested) fillColor = DANGER_HEX;
+
+        let fillAlpha = isOwned ? (state === 'mine' ? 0.95 : 0.88) : 0.88;
+        if (state === 'mine' && region?.integrationStartedAt != null) {
+          fillAlpha = 0.55 + (region.integration / 100) * 0.37;
+        }
+
+        const isSelected = regionId === selectedRegionId;
+        const borderColor = isSelected
+          ? 0xffffff
+          : state === 'mine' ? 0xffffff
+          : nation ? cssToHex(nation.color)
+          : state === 'owned' ? 0x222222
+          : 0x7a8a6a;
+
+        const borderWidth = isSelected
+          ? 3
+          : state === 'mine' ? 3
+          : nation ? 2.5
+          : state === 'owned' ? 1.5
+          : 1.2;
+
+        return { fillColor, fillAlpha, borderColor, borderWidth, isSelected, isNeighbor: false, isContested };
+      };
+
+      const allIds = new Set([...Object.keys(regions), ...Object.keys(prevRegionsRef.current)]);
+      for (const id of allIds) {
+        layer.updateRegion(id, computeStyle(id));
+      }
     };
 
-    const layer = L.geoJSON(geojson, options);
-    layer.addTo(map);
-    layerRef.current = layer;
+    // Subscribe to store changes and re-apply relevant regions
+    const unsubscribe = store.subscribe((state, prev) => {
+      const layer = layerRef.current;
+      if (!layer) return;
 
-    return () => {
-      layer.remove();
-      layerMap.clear();
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, geojson]);
+      const currentMode = mapMode ?? 'region';
+      const modeChanged = prevModeRef.current !== currentMode;
+      prevModeRef.current = currentMode;
 
-  // Pulserende rød animasjon for omstridte regioner
-  const contestedIdsRef = useRef<string[]>([]);
+      if (modeChanged) {
+        applyAll();
+        return;
+      }
 
-  useEffect(() => {
-    contestedIdsRef.current = Object.entries(regions)
-      .filter(([, r]) => r.contestedAt != null)
-      .map(([id]) => id);
-  }, [regions]);
+      const neighborIds = state.selectedRegionId ? new Set(adjacency[state.selectedRegionId] ?? []) : new Set<string>();
+      const prevNeighborIds = prev.selectedRegionId ? new Set(adjacency[prev.selectedRegionId] ?? []) : new Set<string>();
 
+      const toUpdate = new Set<string>();
+
+      for (const id of Object.keys(state.regions)) {
+        const r = state.regions[id];
+        const p = prev.regions[id];
+        if (!p || p.ownerId !== r.ownerId || p.integration !== r.integration ||
+            p.nationId !== r.nationId || p.contestedAt !== r.contestedAt ||
+            p.integrationStartedAt !== r.integrationStartedAt) {
+          toUpdate.add(id);
+        }
+      }
+      for (const id of Object.keys(prev.regions)) {
+        if (!state.regions[id]) toUpdate.add(id);
+      }
+
+      if (prev.selectedRegionId !== state.selectedRegionId) {
+        if (prev.selectedRegionId) {
+          toUpdate.add(prev.selectedRegionId);
+          (adjacency[prev.selectedRegionId] ?? []).forEach(id => toUpdate.add(id));
+        }
+        if (state.selectedRegionId) {
+          toUpdate.add(state.selectedRegionId);
+          (adjacency[state.selectedRegionId] ?? []).forEach(id => toUpdate.add(id));
+        }
+      }
+
+      // Sync selected + neighbors that changed
+      for (const id of [...neighborIds, ...prevNeighborIds]) toUpdate.add(id);
+
+      prevRegionsRef.current = state.regions;
+      prevSelectedRef.current = state.selectedRegionId ?? null;
+
+      const computeStyle = (regionId: string): RegionStyle => {
+        const { regions, slotId, selectedRegionId, nations, players } = state;
+        const region = regions[regionId];
+
+        if (neighborIds.has(regionId) && regionId !== selectedRegionId) {
+          return { fillColor: GOOD_HEX, fillAlpha: 0.25, borderColor: GOOD_HEX, borderWidth: 1.5, isSelected: false, isNeighbor: true, isContested: false };
+        }
+
+        const st = !region ? 'npc'
+          : region.contestedAt ? 'contested'
+          : region.ownerId === slotId ? 'mine'
+          : region.ownerId ? 'owned'
+          : 'npc';
+
+        const isContested = st === 'contested';
+        const empireColor = region?.ownerId ? players[region.ownerId]?.empireColor : undefined;
+        const nation = region?.nationId ? nations[region.nationId] : undefined;
+        const isOwned = st === 'mine' || st === 'owned';
+
+        let fillColor: number;
+        if (currentMode === 'culture') {
+          fillColor = getNpcColor(region?.culturalGroup, regionId, culturalGroupCacheRef.current);
+        } else if (currentMode === 'empire') {
+          fillColor = isOwned && empireColor ? cssToHex(empireColor) : getNpcColor(region?.culturalGroup, regionId, culturalGroupCacheRef.current);
+        } else {
+          if (isOwned && empireColor) fillColor = cssToHex(empireColor);
+          else {
+            const gc = regionColors?.[regionId];
+            fillColor = gc ? cssToHex(gc) : getNpcColor(region?.culturalGroup, regionId, culturalGroupCacheRef.current);
+          }
+        }
+        if (isContested) fillColor = DANGER_HEX;
+
+        let fillAlpha = isOwned ? (st === 'mine' ? 0.95 : 0.88) : 0.88;
+        if (st === 'mine' && region?.integrationStartedAt != null) {
+          fillAlpha = 0.55 + (region.integration / 100) * 0.37;
+        }
+
+        const isSelected = regionId === selectedRegionId;
+        const borderColor = isSelected ? 0xffffff
+          : st === 'mine' ? 0xffffff
+          : nation ? cssToHex(nation.color)
+          : st === 'owned' ? 0x222222
+          : 0x7a8a6a;
+        const borderWidth = isSelected ? 3 : st === 'mine' ? 3 : nation ? 2.5 : st === 'owned' ? 1.5 : 1.2;
+
+        return { fillColor, fillAlpha, borderColor, borderWidth, isSelected, isNeighbor: false, isContested };
+      };
+
+      for (const id of toUpdate) {
+        layer.updateRegion(id, computeStyle(id));
+      }
+    });
+
+    applyAll();
+    return unsubscribe;
+  }, [layerRef, adjacency, mapMode, regionColors, store]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Contested pulse animation
   useEffect(() => {
     const id = setInterval(() => {
-      if (contestedIdsRef.current.length === 0) return;
+      const { regions } = store.getState();
+      const layer = layerRef.current;
+      if (!layer) return;
       const t = Date.now() / 600;
-      const opacity = 0.35 + 0.4 * Math.abs(Math.sin(t));
-      for (const rid of contestedIdsRef.current) {
-        layerMapRef.current.get(rid)?.setStyle({ fillOpacity: opacity });
+      const alpha = 0.35 + 0.4 * Math.abs(Math.sin(t));
+      for (const [rid, r] of Object.entries(regions)) {
+        if (r.contestedAt != null) {
+          const style = getContestedPulseStyle(alpha);
+          layer.updateRegion(rid, { ...style, isContested: true });
+        }
       }
     }, 100);
     return () => clearInterval(id);
-  }, []);
+  }, [layerRef, store]);
+}
 
-  // Refs for å detektere hva som faktisk endret seg
-  const prevRegionsRef = useRef<Record<string, Region>>({});
-  const prevSelectedRef = useRef<string | null>(null);
-  const prevMapModeRef = useRef<MapMode>(mapMode ?? 'region');
-
-  // Målrettet stil-oppdatering — kun endrede regioner får setStyle
-  useEffect(() => {
-    if (!layerRef.current) return;
-
-    const prev = prevRegionsRef.current;
-    const prevSelected = prevSelectedRef.current;
-    const currentMode = mapMode ?? 'region';
-    const modeChanged = prevMapModeRef.current !== currentMode;
-
-    prevRegionsRef.current = regions;
-    prevSelectedRef.current = selectedRegionId ?? null;
-    prevMapModeRef.current = currentMode;
-
-    const neighborIds = selectedRegionId
-      ? new Set(adjacency[selectedRegionId] ?? [])
-      : new Set<string>();
-
-    const applyStyle = (regionId: string) => {
-      const lyr = layerMapRef.current.get(regionId);
-      if (!lyr) return;
-      if (neighborIds.has(regionId)) {
-        lyr.setStyle(regionPathOptions('neighbor'));
-        return;
-      }
-      const region = regions[regionId];
-      const state = getState(regionId, region);
-      const empireColor = getEmpireColor(region);
-      const nationOverlay = getNationOverlay(region);
-      const baseStyle = regionPathOptions(state, empireColor);
-      baseStyle.fillColor = getFillColor(regionId, region, state, empireColor);
-      let fillOpacity: number | undefined;
-      if (region?.ownerId === slotId && region.integrationStartedAt !== null) {
-        fillOpacity = 0.55 + (region.integration / 100) * 0.37;
-      }
-      lyr.setStyle({
-        ...baseStyle,
-        ...(fillOpacity !== undefined ? { fillOpacity } : {}),
-        ...(nationOverlay ?? {}),
-      });
-    };
-
-    if (modeChanged) {
-      layerMapRef.current.forEach((_, id) => applyStyle(id));
-      return;
-    }
-
-    const toUpdate = new Set<string>();
-
-    for (const id of Object.keys(regions)) {
-      const r = regions[id];
-      const p = prev[id];
-      if (
-        !p ||
-        p.ownerId !== r.ownerId ||
-        p.integration !== r.integration ||
-        p.nationId !== r.nationId ||
-        p.contestedAt !== r.contestedAt ||
-        p.integrationStartedAt !== r.integrationStartedAt
-      ) {
-        toUpdate.add(id);
-      }
-    }
-    for (const id of Object.keys(prev)) {
-      if (!regions[id]) toUpdate.add(id);
-    }
-
-    if (prevSelected !== (selectedRegionId ?? null)) {
-      if (prevSelected) {
-        toUpdate.add(prevSelected);
-        (adjacency[prevSelected] ?? []).forEach(id => toUpdate.add(id));
-      }
-      if (selectedRegionId) {
-        toUpdate.add(selectedRegionId);
-        (adjacency[selectedRegionId] ?? []).forEach(id => toUpdate.add(id));
-      }
-    }
-
-    toUpdate.forEach(applyStyle);
-  }, [regions, slotId, selectedRegionId, adjacency, nations, mapMode, regionColors]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return null;
+function getContestedPulseStyle(alpha: number): RegionStyle {
+  return {
+    fillColor: DANGER_HEX,
+    fillAlpha: alpha,
+    borderColor: DANGER_HEX,
+    borderWidth: 2,
+    isSelected: false,
+    isNeighbor: false,
+    isContested: true,
+  };
 }

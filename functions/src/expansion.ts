@@ -63,8 +63,8 @@ export const expandRegion = functions.onCall<ExpandRegionArgs, Promise<CallableR
     if (metaSnap.val() !== 'active') return { ok: false, error: 'game-not-active', melding: M.SPILL_IKKE_AKTIVT };
 
     const target = targetSnap.val() as Region | null;
-    if (!target) return { ok: false, error: 'region-not-found', melding: M.REGION_IKKE_FUNNET };
-    if (target.ownerId !== null) return { ok: false, error: 'already-owned', melding: M.REGION_ALLEREDE_EIDD };
+    // Unseeded NPC regions (not yet in RTDB) are treated as unowned — allow expansion
+    if (target !== null && target.ownerId !== null) return { ok: false, error: 'already-owned', melding: M.REGION_ALLEREDE_EIDD };
 
     const player = playerSnap.val() as { military: number; regionIds: string[] } | null;
     if (!player) return { ok: false, error: 'player-not-found', melding: M.IKKE_AUTENTISERT };
@@ -133,8 +133,7 @@ export const attemptDiplomaticTakeover = functions.onCall<DiploTakeoverArgs, Pro
     if (metaSnap.val() !== 'active') return { ok: false, error: 'game-not-active', melding: M.SPILL_IKKE_AKTIVT };
 
     const target = targetSnap.val() as Region | null;
-    if (!target) return { ok: false, error: 'region-not-found', melding: M.REGION_IKKE_FUNNET };
-    if (target.ownerId !== null) return { ok: false, error: 'not-npc', melding: M.REGION_IKKE_NPC };
+    if (target !== null && target.ownerId !== null) return { ok: false, error: 'not-npc', melding: M.REGION_IKKE_NPC };
 
     const player = playerSnap.val() as Player | null;
     if (!player) return { ok: false, error: 'player-not-found', melding: M.IKKE_AUTENTISERT };
@@ -201,8 +200,7 @@ export const investInRegion = functions.onCall<InvestArgs, Promise<CallableResul
     if (metaSnap.val() !== 'active') return { ok: false, error: 'game-not-active', melding: M.SPILL_IKKE_AKTIVT };
 
     const target = targetSnap.val() as Region | null;
-    if (!target) return { ok: false, error: 'region-not-found', melding: M.REGION_IKKE_FUNNET };
-    if (target.ownerId !== null) return { ok: false, error: 'not-npc', melding: M.REGION_IKKE_NPC };
+    if (target !== null && target.ownerId !== null) return { ok: false, error: 'not-npc', melding: M.REGION_IKKE_NPC };
 
     const player = playerSnap.val() as Player | null;
     if (!player) return { ok: false, error: 'player-not-found', melding: M.IKKE_AUTENTISERT };
@@ -217,12 +215,30 @@ export const investInRegion = functions.onCall<InvestArgs, Promise<CallableResul
       return { ok: false, error: 'insufficient-treasury', melding: M.IKKE_NOK_PENGER };
     }
 
-    const newSat = Math.min(INVEST_MAX_SAT, (target.satisfaction ?? 0) + INVEST_SAT_GAIN);
-    const prevBond = target.tradeBond?.[slotId] ?? 0;
+    const newSat = Math.min(INVEST_MAX_SAT, (target?.satisfaction ?? 0) + INVEST_SAT_GAIN);
+    const prevBond = target?.tradeBond?.[slotId] ?? 0;
     const newBond = Math.min(1, prevBond + INVEST_TRADE_BOND_GAIN);
 
     const now = Date.now();
     const eventId = crypto.randomUUID();
+
+    // When region has never been seeded, initialize the full node so ownerId: null is set
+    // (partial writes would leave ownerId undefined, breaking NPC detection on the client)
+    if (!target) {
+      const defaults = getRegionDefaults(targetRegionId, now);
+      if (!defaults) return { ok: false, error: 'region-not-found', melding: M.REGION_IKKE_FUNNET };
+      await db.ref(`games/${gameId}/regions/${targetRegionId}`).set({
+        ...defaults,
+        satisfaction: newSat,
+        tradeBond: { [slotId]: newBond },
+      });
+      await db.ref().update({
+        [`games/${gameId}/players/${slotId}/treasury`]: (player.treasury ?? 0) - INVEST_COST,
+        [`games/${gameId}/events/${eventId}`]: { type: 'invest', slotId, targetRegionId, at: now },
+      });
+      return { ok: true };
+    }
+
     await db.ref().update({
       [`games/${gameId}/players/${slotId}/treasury`]: (player.treasury ?? 0) - INVEST_COST,
       [`games/${gameId}/regions/${targetRegionId}/satisfaction`]: newSat,

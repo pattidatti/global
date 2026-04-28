@@ -36,6 +36,10 @@ const COUNTRIES_URL =
   'ne_110m_admin_0_countries.geojson';
 const COUNTRIES_CACHE_PATH = path.join(ROOT, 'data', 'ne_admin0_countries.geojson');
 
+// Mikrostater med geometri fra countries_raw.geojson (ISO3166-1-Alpha-3-nøkkel)
+const MICROSTATES_PATH = path.join(ROOT, 'data', 'countries_raw.geojson');
+const MICROSTATE_ISOS = new Set(['AND', 'MCO', 'LIE', 'SMR', 'MLT']);
+
 // ISO-koder som har admin-1-dekning fra det lille datasettet (de 9 største landene)
 const ADMIN1_ISOS = new Set(['AUS', 'BRA', 'CAN', 'CHN', 'IDN', 'IND', 'RUS', 'USA', 'ZAF']);
 
@@ -148,6 +152,44 @@ function slugify(name: string, iso: string, idx: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Geografisk distribusjon av provinser (farthest-first greedy)
+// ---------------------------------------------------------------------------
+
+function selectGeographicallyDistributed(
+  items: { f: Feature<Geometry, GeoJsonProperties>; area: number }[],
+  maxCount: number,
+): { f: Feature<Geometry, GeoJsonProperties>; area: number }[] {
+  if (items.length <= maxCount) return items;
+
+  const withCentroid = items.map(item => {
+    let cx = 0, cy = 0;
+    try {
+      const c = turf.centroid(item.f as Feature<Geometry>);
+      [cx, cy] = c.geometry.coordinates;
+    } catch { /* behold 0,0 */ }
+    return { ...item, cx, cy };
+  });
+
+  // Start med den største regionen, velg deretter den som er lengst unna allerede valgte
+  withCentroid.sort((a, b) => b.area - a.area);
+  const selected: typeof withCentroid = [withCentroid[0]];
+  const remaining = withCentroid.slice(1);
+
+  while (selected.length < maxCount && remaining.length > 0) {
+    let bestIdx = 0;
+    let bestMinDist = -1;
+    for (let i = 0; i < remaining.length; i++) {
+      const minDist = Math.min(
+        ...selected.map(s => Math.hypot(remaining[i].cx - s.cx, remaining[i].cy - s.cy)),
+      );
+      if (minDist > bestMinDist) { bestMinDist = minDist; bestIdx = i; }
+    }
+    selected.push(...remaining.splice(bestIdx, 1));
+  }
+  return selected;
+}
+
+// ---------------------------------------------------------------------------
 // Last GeoJSON (lokal fil eller nedlasting)
 // ---------------------------------------------------------------------------
 
@@ -216,7 +258,7 @@ async function loadGeoJSON(inputPath?: string): Promise<FeatureCollection> {
     }
 
     for (const items of Object.values(byIso)) {
-      const top = items.sort((a, b) => b.area - a.area).slice(0, MAX_PROVINCES_EUROPE);
+      const top = selectGeographicallyDistributed(items, MAX_PROVINCES_EUROPE);
       for (const { f } of top) {
         europeanFeatures.push({
           ...f,
@@ -246,9 +288,31 @@ async function loadGeoJSON(inputPath?: string): Promise<FeatureCollection> {
 
   console.log(`  ${countriesFeatures.length} land-regioner fra admin-0 (resten av verden).`);
 
+  // Mikrostater fra countries_raw.geojson (AND, MCO, LIE, SMR, MLT)
+  // Merkes som _isMicrostate: true — arealsjekk hoppes over i processFeatures
+  const microstateFeatures: Feature<Geometry, GeoJsonProperties>[] = [];
+  if (fs.existsSync(MICROSTATES_PATH)) {
+    const rawMicro = fs.readFileSync(MICROSTATES_PATH, 'utf-8');
+    const microFC = JSON.parse(rawMicro) as FeatureCollection;
+    for (const f of microFC.features) {
+      const iso = f.properties?.['ISO3166-1-Alpha-3'] as string | undefined;
+      if (!iso || !MICROSTATE_ISOS.has(iso)) continue;
+      microstateFeatures.push({
+        ...f,
+        properties: {
+          ...f.properties,
+          // Normaliser ISO-nøkkel til adm0_a3 slik at processFeatures finner den
+          adm0_a3: iso,
+          _isMicrostate: true,
+        },
+      });
+    }
+    console.log(`  ${microstateFeatures.length} mikrostater lastet fra countries_raw.geojson.`);
+  }
+
   return {
     type: 'FeatureCollection',
-    features: [...admin1Features, ...europeanFeatures, ...countriesFeatures],
+    features: [...admin1Features, ...europeanFeatures, ...microstateFeatures, ...countriesFeatures],
   };
 }
 
@@ -274,22 +338,25 @@ function processFeatures(fc: FeatureCollection): {
     if (!feature.geometry) continue;
     if (feature.geometry.type === 'Point') continue;
 
+    const isMicrostate = !!(feature.properties?.['_isMicrostate']);
     const isAdmin1 = !!(feature.properties?.['_fromAdmin1']);
     const minArea = isAdmin1 ? MIN_AREA_ADMIN1_KM2 : MIN_AREA_ADMIN0_KM2;
 
-    // Arealsjekk
-    try {
-      const areaSqDeg = turf.area(feature as Feature) / 1_000_000; // m² → km²
-      if (areaSqDeg < minArea) continue;
-    } catch {
-      // Kan ikke beregne areal — inkluder uansett
+    // Arealsjekk — mikrostater er alltid inkludert
+    if (!isMicrostate) {
+      try {
+        const areaSqDeg = turf.area(feature as Feature) / 1_000_000; // m² → km²
+        if (areaSqDeg < minArea) continue;
+      } catch {
+        // Kan ikke beregne areal — inkluder uansett
+      }
     }
 
     const props = feature.properties ?? {};
     const name: string = props['name'] ?? props['NAME'] ?? props['ADMIN'] ?? props['SOVEREIGNT'] ?? props['gn_name'] ?? `Region${idx}`;
     const admin0: string = props['admin'] ?? props['ADMIN'] ?? props['SOVEREIGNT'] ?? props['NAME'] ?? '';
-    // ADM0_A3 er pålitelig i NE admin-0; adm0_a3 i admin-1
-    const isoRaw: string = props['ADM0_A3'] ?? props['adm0_a3'] ?? props['ISO_A3'] ?? 'UNK';
+    // ADM0_A3 er pålitelig i NE admin-0; adm0_a3 i admin-1; ISO3166-1-Alpha-3 i countries_raw
+    const isoRaw: string = props['ADM0_A3'] ?? props['adm0_a3'] ?? props['ISO_A3'] ?? props['ISO3166-1-Alpha-3'] ?? 'UNK';
     const iso: string = isoRaw === '-99' ? 'UNK' : isoRaw;
 
     // Beregn sentroid

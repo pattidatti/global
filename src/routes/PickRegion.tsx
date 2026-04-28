@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { MapContainer, TileLayer } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
 import { firebaseApp } from '../firebase/config';
 import { useGameStore } from '../game/store';
 import { getEmpireColor } from '../game/empire-colors';
 import { subscribeToPlayer, subscribeToRegions } from '../firebase/db';
-import { PickRegionLayer } from '../map/PickRegionLayer';
+import { PickMapView } from '../map/PickMapView';
 
 const EMPTY_GEOJSON: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
@@ -64,6 +62,7 @@ export function PickRegion() {
   const [colorChoices, setColorChoices] = useState<number[]>([]);
   const [chosenColorIdx, setChosenColorIdx] = useState<number | null>(null);
   const [step, setStep] = useState<'pick-region' | 'pick-color' | 'confirming'>('pick-region');
+  const [picking, setPicking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -95,23 +94,28 @@ export function PickRegion() {
   }, [gameId]);
 
   async function handleRegionClick(regionId: string) {
-    if (!gameId || !slotId || step !== 'pick-region') return;
+    if (!gameId || !slotId || step !== 'pick-region' || picking) return;
+    setPicking(true);
     setSelectedRegionId(regionId);
     setError(null);
 
-    const functions = getFunctions(firebaseApp, 'europe-west1');
-    const pickStartRegion = httpsCallable<PickStartRegionRequest, PickStartRegionResult>(
-      functions, 'pickStartRegion',
-    );
-    const result = await pickStartRegion({ gameId, regionId, prevRegionId: selectedRegionId ?? undefined });
-    const data = result.data;
-    if (!data.ok || !data.data?.availableColorIndices) {
-      setError(data.melding ?? 'Regionen er ikke tilgjengelig.');
-      setSelectedRegionId(null);
-      return;
+    try {
+      const functions = getFunctions(firebaseApp, 'europe-west1');
+      const pickStartRegion = httpsCallable<PickStartRegionRequest, PickStartRegionResult>(
+        functions, 'pickStartRegion',
+      );
+      const result = await pickStartRegion({ gameId, regionId, prevRegionId: selectedRegionId ?? undefined });
+      const data = result.data;
+      if (!data.ok || !data.data?.availableColorIndices) {
+        setError(data.melding ?? 'Regionen er ikke tilgjengelig.');
+        setSelectedRegionId(null);
+        return;
+      }
+      setColorChoices(data.data.availableColorIndices);
+      setStep('pick-color');
+    } finally {
+      setPicking(false);
     }
-    setColorChoices(data.data.availableColorIndices);
-    setStep('pick-color');
   }
 
   async function handleColorConfirm() {
@@ -148,30 +152,30 @@ export function PickRegion() {
         >
           Velg din startregion
         </h1>
-        <p className="text-inkLo text-sm font-serif italic mt-0.5">
+        <p className="text-inkLo text-sm font-serif italic mt-0.5 flex items-center gap-2">
           {geojsonLoading
             ? 'Laster kart …'
+            : picking
+            ? (
+              <>
+                <span
+                  className="inline-block w-3.5 h-3.5 rounded-full border-2 border-accent border-t-transparent animate-spin shrink-0"
+                  aria-hidden="true"
+                />
+                Reserverer region, vent litt …
+              </>
+            )
             : 'Klikk på en tilgjengelig region for å plante imperiets fane der.'}
         </p>
       </header>
 
       <div className="flex-1 relative">
-        <MapContainer center={[20, 0]} zoom={3} className="h-full w-full">
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
-            maxZoom={14}
-            minZoom={2}
-          />
-          {!geojsonLoading && (
-            <PickRegionLayer
-              geojson={geojson}
-              takenRegionIds={takenRegionIds}
-              selectedRegionId={selectedRegionId}
-              onRegionClick={handleRegionClick}
-            />
-          )}
-        </MapContainer>
+        <PickMapView
+          geojson={geojson}
+          takenRegionIds={takenRegionIds}
+          selectedRegionId={selectedRegionId}
+          onRegionClick={handleRegionClick}
+        />
 
         {(step === 'pick-color' || step === 'confirming') && (
           <div

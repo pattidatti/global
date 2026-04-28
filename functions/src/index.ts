@@ -3,6 +3,7 @@ export { freezeGame, resumeGame, endGame, deleteGame } from './teacher';
 export { buildBuilding, cancelBuild, harvestBuilding } from './buildings';
 export { expandRegion, attemptDiplomaticTakeover, investInRegion } from './expansion';
 export { macroTick } from './tick';
+export { triggerDevTick } from './dev';
 export { formNation, dissolveNation } from './nation';
 export { proposeTrade, cancelTrade, acceptTrade } from './market';
 export {

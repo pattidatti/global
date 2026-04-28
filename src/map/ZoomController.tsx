@@ -1,25 +1,5 @@
-import { useEffect } from 'react';
-import { useMap } from 'react-leaflet';
-import { zoomClassName } from './styles';
-
-interface ZoomControllerProps {
-  onZoomChange?: (zoom: number, className: string) => void;
-}
-
-export function ZoomController({ onZoomChange }: ZoomControllerProps) {
-  const map = useMap();
-
-  useEffect(() => {
-    const handleZoom = () => {
-      const z = map.getZoom();
-      const cls = zoomClassName(z);
-      onZoomChange?.(z, cls);
-    };
-
-    map.on('zoomend', handleZoom);
-    handleZoom();
-    return () => { map.off('zoomend', handleZoom); };
-  }, [map, onZoomChange]);
-
+// ZoomController is no longer used — zoom is handled by pixi-viewport.
+// File kept to avoid broken imports in other parts of the codebase.
+export function ZoomController(): null {
   return null;
 }

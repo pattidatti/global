@@ -75,6 +75,17 @@ export function getRegionDefaults(
   };
 }
 
+/** Returnerer defaults for alle regioner — brukes av createGame til å pre-seede RTDB. */
+export function getAllRegionDefaults(now: number): Record<string, Record<string, unknown>> {
+  const meta = getRegionMeta();
+  const result: Record<string, Record<string, unknown>> = {};
+  for (const regionId of Object.keys(meta)) {
+    const defaults = getRegionDefaults(regionId, now);
+    if (defaults) result[regionId] = defaults;
+  }
+  return result;
+}
+
 /** Eksponert kun for testing — clearer cachen mellom tester. */
 export function _resetSeedCacheForTest(): void {
   metaCache = null;

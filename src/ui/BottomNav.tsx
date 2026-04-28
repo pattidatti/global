@@ -20,6 +20,7 @@ const TABS: Tab[] = [
 export function BottomNav() {
   const activeScreen = useGameStore(s => s.activeScreen);
   const setActiveScreen = useGameStore(s => s.setActiveScreen);
+  const unreadChat = useGameStore(s => s.unreadChat);
   const player = useMyPlayer();
   const empireColor = player?.empireColor ?? null;
 
@@ -46,6 +47,12 @@ export function BottomNav() {
           >
             <Icon size={20} strokeWidth={isActive ? 2.2 : 1.6} aria-hidden="true" />
             <span className="tracking-wide">{label}</span>
+            {id === 'diplomacy' && unreadChat && !isActive && (
+              <span
+                className="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-danger ring-1 ring-panel animate-pulse"
+                aria-label="Uleste meldinger"
+              />
+            )}
             {isActive && (
               <>
                 <span

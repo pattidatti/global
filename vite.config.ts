@@ -10,7 +10,7 @@ export default defineConfig({
         manualChunks: {
           react: ['react', 'react-dom', 'react-router-dom'],
           firebase: ['firebase/app', 'firebase/auth', 'firebase/database', 'firebase/functions'],
-          leaflet: ['leaflet', 'react-leaflet'],
+          pixi: ['pixi.js', 'pixi-viewport'],
           charts: ['recharts'],
           forcegraph: ['react-force-graph-2d'],
         },

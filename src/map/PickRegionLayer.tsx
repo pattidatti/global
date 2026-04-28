@@ -1,76 +1,75 @@
 import { useEffect, useRef } from 'react';
-import { useMap } from 'react-leaflet';
-import L from 'leaflet';
+import { Graphics, Container } from 'pixi.js';
+import type { Viewport } from 'pixi-viewport';
+import type { ProjectedFeature } from './geoProjector';
 
-interface RegionFeature extends GeoJSON.Feature<GeoJSON.Geometry> {
-  properties: { regionId: string };
-}
+const COLOR_AVAILABLE = 0x3da9fc;
+const COLOR_TAKEN     = 0x3a3f2e;
+const COLOR_SELECTED  = 0x4caf7d;
 
 interface PickRegionLayerProps {
-  geojson: GeoJSON.FeatureCollection;
+  features: ProjectedFeature[];
   takenRegionIds: Set<string>;
   selectedRegionId: string | null;
   onRegionClick: (regionId: string) => void;
+  viewport: Viewport;
 }
 
-const COLOR_AVAILABLE = '#3da9fc';
-const COLOR_TAKEN = '#3a3f2e';
-const COLOR_SELECTED = '#4caf7d';
+export function usePickRegionLayer({
+  features,
+  takenRegionIds,
+  selectedRegionId,
+  onRegionClick,
+  viewport,
+}: PickRegionLayerProps): void {
+  const containerRef = useRef<Container | null>(null);
+  const gfxMapRef = useRef<Map<string, Graphics>>(new Map());
 
-export function PickRegionLayer({ geojson, takenRegionIds, selectedRegionId, onRegionClick }: PickRegionLayerProps) {
-  const map = useMap();
-  const layerRef = useRef<L.GeoJSON | null>(null);
-
+  // Build layer once
   useEffect(() => {
-    if (layerRef.current) {
-      map.removeLayer(layerRef.current);
+    const container = new Container();
+    viewport.addChild(container);
+    containerRef.current = container;
+
+    for (const feature of features) {
+      const gfx = new Graphics();
+      gfx.eventMode = 'static';
+      gfx.cursor = 'pointer';
+      gfx.on('pointertap', () => onRegionClick(feature.regionId));
+      container.addChild(gfx);
+      gfxMapRef.current.set(feature.regionId, gfx);
     }
 
-    layerRef.current = L.geoJSON(geojson as GeoJSON.GeoJsonObject, {
-      style: (feature) => {
-        const f = feature as RegionFeature;
-        const regionId = f?.properties?.regionId;
-        const taken = takenRegionIds.has(regionId);
-        const selected = regionId === selectedRegionId;
-        return {
-          fillColor: selected ? COLOR_SELECTED : taken ? COLOR_TAKEN : COLOR_AVAILABLE,
-          fillOpacity: selected ? 0.65 : taken ? 0.4 : 0.35,
-          color: selected ? COLOR_SELECTED : taken ? '#5a6050' : '#2a8fd0',
-          weight: selected ? 2 : 1,
-          interactive: !taken,
-        };
-      },
-      onEachFeature: (feature, layer) => {
-        const f = feature as RegionFeature;
-        const regionId = f?.properties?.regionId;
-        if (!regionId || takenRegionIds.has(regionId)) return;
-
-        layer.on({
-          mouseover: (e) => {
-            if (regionId === selectedRegionId) return;
-            (e.target as L.Path).setStyle({ fillOpacity: 0.6, weight: 2 });
-          },
-          mouseout: (e) => {
-            if (regionId === selectedRegionId) return;
-            (e.target as L.Path).setStyle({ fillOpacity: 0.35, weight: 1 });
-          },
-          click: () => onRegionClick(regionId),
-        });
-
-        const name = (f.properties as Record<string, string>).name ?? regionId;
-        layer.bindTooltip(name, { sticky: true, className: 'region-tooltip' });
-      },
-    });
-
-    layerRef.current.addTo(map);
-
     return () => {
-      if (layerRef.current) {
-        map.removeLayer(layerRef.current);
-        layerRef.current = null;
-      }
+      container.destroy({ children: true });
+      containerRef.current = null;
+      gfxMapRef.current.clear();
     };
-  }, [geojson, takenRegionIds, selectedRegionId, map, onRegionClick]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [features, viewport, onRegionClick]);
 
-  return null;
+  // Update styles when taken/selected changes
+  useEffect(() => {
+    for (const feature of features) {
+      const gfx = gfxMapRef.current.get(feature.regionId);
+      if (!gfx) continue;
+
+      const taken = takenRegionIds.has(feature.regionId);
+      const selected = feature.regionId === selectedRegionId;
+
+      gfx.clear();
+      for (const ring of feature.rings) {
+        const color = selected ? COLOR_SELECTED : taken ? COLOR_TAKEN : COLOR_AVAILABLE;
+        const alpha = selected ? 0.65 : taken ? 0.4 : 0.35;
+        const borderColor = selected ? COLOR_SELECTED : taken ? 0x5a6050 : 0x2a8fd0;
+
+        gfx.poly(ring)
+          .fill({ color, alpha })
+          .stroke({ color: borderColor, width: selected ? 2 : 1 });
+      }
+
+      gfx.eventMode = taken ? 'none' : 'static';
+      gfx.cursor = taken ? 'default' : 'pointer';
+    }
+  }, [features, takenRegionIds, selectedRegionId]);
 }

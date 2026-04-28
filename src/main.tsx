@@ -1,3 +1,4 @@
+import './firebase/dev-emulators';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';

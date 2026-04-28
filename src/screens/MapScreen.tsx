@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, Component, type ReactNode, type ErrorInfo } from 'react';
 import { MapView } from '../map/MapView';
 import { MapModeControl } from '../map/MapModeControl';
 import type { MapMode } from '../map/MapModeControl';
@@ -21,6 +21,27 @@ async function loadJson<T>(url: string, fallback: T): Promise<T> {
 }
 
 const EMPTY_GEOJSON: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+
+class PanelErrorBoundary extends Component<
+  { children: ReactNode; fallback?: ReactNode },
+  { crashed: boolean }
+> {
+  state = { crashed: false };
+  componentDidCatch(err: Error, info: ErrorInfo) {
+    console.error('[MapScreen] Panel krasjet:', err, info.componentStack);
+  }
+  static getDerivedStateFromError() { return { crashed: true }; }
+  render() {
+    if (this.state.crashed) {
+      return this.props.fallback ?? (
+        <p className="p-3 text-xs text-danger font-serif italic">
+          Panel utilgjengelig. Last siden på nytt.
+        </p>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function getFeatureCenter(feature: GeoJSON.Feature): [number, number] | null {
   const coords: number[][] = [];
@@ -116,7 +137,9 @@ export function MapScreen() {
         width={300}
         maxHeight="calc(100% - 24px)"
       >
-        <NasjonsPanel adjacency={adjacency} />
+        <PanelErrorBoundary>
+          <NasjonsPanel adjacency={adjacency} />
+        </PanelErrorBoundary>
       </FloatingPanel>
 
       <FloatingPanel

@@ -45,7 +45,7 @@ export function NasjonsPanel({ adjacency }: NasjonsPanelProps) {
     const result: { regionId: string; buildingId: string }[] = [];
     for (const [regionId, region] of Object.entries(myRegions)) {
       for (const [buildingId, building] of Object.entries(region.buildings ?? {})) {
-        const hasPending = Object.values(building.pendingHarvest).some(v => (v ?? 0) > 0);
+        const hasPending = Object.values(building.pendingHarvest ?? {}).some(v => (v ?? 0) > 0);
         if (hasPending && !pendingHarvests.has(buildingId)) {
           result.push({ regionId, buildingId });
         }

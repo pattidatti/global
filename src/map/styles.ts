@@ -1,4 +1,3 @@
-import type { PathOptions } from 'leaflet';
 import { colors } from '../ui/tokens';
 
 export type RegionState = 'npc' | 'owned' | 'mine' | 'neighbor' | 'contested';
@@ -10,46 +9,13 @@ export function zoomClassName(z: number): string {
   return 'zoom-building';
 }
 
-export function regionPathOptions(
-  state: RegionState,
-  empireColor?: string,
-): PathOptions {
+// Kept for potential future use — returns design-token color strings per region state
+export function regionStateColor(state: RegionState, empireColor?: string): string {
   switch (state) {
-    case 'npc':
-      return {
-        fillColor:   colors.npc,
-        fillOpacity: 0.88,
-        color:       '#7a8a6a',
-        weight:      1.2,
-      };
-    case 'owned':
-      return {
-        fillColor:   empireColor ?? colors.accent,
-        fillOpacity: 0.88,
-        color:       '#222',
-        weight:      1.5,
-      };
-    case 'mine':
-      return {
-        fillColor:   empireColor ?? colors.accent,
-        fillOpacity: 0.95,
-        color:       '#fff',
-        weight:      3,
-      };
-    case 'neighbor':
-      return {
-        fillColor:   colors.good,
-        fillOpacity: 0.25,
-        color:       colors.good,
-        weight:      1.5,
-        dashArray:   '2 2',
-      };
-    case 'contested':
-      return {
-        fillColor:   colors.danger,
-        fillOpacity: 0.5,
-        color:       colors.danger,
-        weight:      2,
-      };
+    case 'npc':      return colors.npc;
+    case 'owned':    return empireColor ?? colors.accent;
+    case 'mine':     return empireColor ?? colors.accent;
+    case 'neighbor': return colors.good;
+    case 'contested':return colors.danger;
   }
 }

@@ -25,7 +25,7 @@ const MACRO_TICK_MIN = 10;
 // tickGame — kjøres per spill
 // ---------------------------------------------------------------------------
 
-async function tickGame(gameId: string, now: number): Promise<void> {
+export async function tickGame(gameId: string, now: number): Promise<void> {
   const [regionsSnap] = await Promise.all([
     db.ref(`games/${gameId}/regions`).once('value'),
   ]);
@@ -85,7 +85,11 @@ async function tickGame(gameId: string, now: number): Promise<void> {
 
   delta[`games/${gameId}/meta/lastMacroTickAt`] = now;
 
-  await db.ref().update(delta);
+  // Fjern undefined og NaN — RTDB avviser begge
+  const cleanDelta = Object.fromEntries(
+    Object.entries(delta).filter(([, v]) => v !== undefined && !(typeof v === 'number' && Number.isNaN(v))),
+  );
+  await db.ref().update(cleanDelta);
 
   // Match orderbook etter at regions/players er oppdatert (slik at evt.
   // ny treasury fra harvest-tikker er på plass først).

@@ -71,10 +71,10 @@ export function tickIntegration(
   region: Region,
   deltaMin: number,
 ): { integration: number; integrationStartedAt: number | null } | null {
-  if (region.integrationStartedAt === null) return null;
+  if (region.integrationStartedAt == null) return null;
 
   const progress = (deltaMin / INTEGRATION_DURATION_MIN) * 100;
-  const newIntegration = Math.min(region.integration + progress, 100);
+  const newIntegration = Math.min((region.integration ?? 0) + progress, 100);
 
   if (newIntegration >= 100) {
     return { integration: 100, integrationStartedAt: null };
@@ -99,18 +99,20 @@ export function tickSatisfaction(
     if (allSameOwner) delta += 0.5;
   }
 
-  if (region.integrationStartedAt !== null && region.integration < 100) {
+  if (region.integrationStartedAt != null && region.integration < 100) {
     delta -= 0.5;
   }
 
-  return Math.max(0, Math.min(100, region.satisfaction + delta));
+  return Math.max(0, Math.min(100, (region.satisfaction ?? 50) + delta));
 }
 
 /**
  * Beregner ny befolkning.
  */
 export function tickPopulation(region: Region): number {
-  if (region.satisfaction > 60) return Math.floor(region.population * 1.001);
-  if (region.satisfaction < 30) return Math.floor(region.population * 0.999);
-  return region.population;
+  const sat = region.satisfaction ?? 50;
+  const pop = region.population ?? 0;
+  if (sat > 60) return Math.floor(pop * 1.001);
+  if (sat < 30) return Math.floor(pop * 0.999);
+  return pop;
 }

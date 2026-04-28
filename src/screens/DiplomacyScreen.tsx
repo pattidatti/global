@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { Panel } from '../ui/Panel';
 import { useGameStore } from '../game/store';
@@ -43,6 +43,9 @@ export function DiplomacyScreen() {
   const slotId = useGameStore(s => s.slotId);
   const gameId = useGameStore(s => s.gameId);
   const diplomacy = useGameStore(s => s.diplomacy);
+  const setUnreadChat = useGameStore(s => s.setUnreadChat);
+
+  useEffect(() => { setUnreadChat(false); }, [setUnreadChat]);
 
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [chatTab, setChatTab] = useState<'global' | 'private'>('global');

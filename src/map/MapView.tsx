@@ -1,10 +1,17 @@
-import { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, ZoomControl, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import { RegionLayer } from './RegionLayer';
-import type { MapMode } from './MapModeControl';
-import { ZoomController } from './ZoomController';
+import { useRef, useMemo, useEffect, useState } from 'react';
+import { usePixiApp } from './usePixiApp';
+import { usePixiViewport } from './usePixiViewport';
+import { projectFeatures } from './geoProjector';
+import { project } from './projection';
+import { RegionGraphicsLayer } from './RegionGraphicsLayer';
+import { useRegionLayer } from './RegionLayer';
+import { BuildingMarkersOverlay } from './BuildingMarkersOverlay';
+import { OceanLayer } from './effects/OceanLayer';
+import { CloudLayer } from './effects/CloudLayer';
+import { VignetteOverlay } from './effects/VignetteOverlay';
 import { useGameStore } from '../game/store';
+import type { MapMode } from './MapModeControl';
+import type { Viewport } from 'pixi-viewport';
 
 interface MapViewProps {
   geojson?: GeoJSON.FeatureCollection | null;
@@ -16,59 +23,103 @@ interface MapViewProps {
 
 const EMPTY_GEOJSON: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-function TileLayerWithFallback() {
-  const [tilesFailed, setTilesFailed] = useState(false);
-  if (tilesFailed) return null;
+// Inner component that runs after both app + viewport are ready
+function MapCanvas({
+  geojson,
+  adjacency,
+  flyTarget,
+  mapMode,
+  regionColors,
+  viewport,
+}: MapViewProps & { viewport: Viewport }) {
+  const setSelectedRegion = useGameStore(s => s.setSelectedRegion);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const layerRef = useRef<RegionGraphicsLayer | null>(null);
+  const prevFlyRef = useRef<string>('');
+
+  const features = useMemo(() => projectFeatures(geojson ?? EMPTY_GEOJSON), [geojson]);
+
+  // Build region graphics once per geojson load
+  useEffect(() => {
+    if (features.length === 0) return;
+    const layer = new RegionGraphicsLayer(viewport, setSelectedRegion, setHoveredId);
+    layer.buildAll(features);
+    layerRef.current = layer;
+    return () => {
+      layer.destroy();
+      layerRef.current = null;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [features, viewport]);
+
+  // Zustand → PixiJS style bridge
+  useRegionLayer(layerRef, adjacency ?? {}, mapMode, regionColors);
+
+  // FlyTo — flyTarget is [lat, lon]
+  useEffect(() => {
+    if (!flyTarget) return;
+    const key = `${flyTarget[0]},${flyTarget[1]}`;
+    if (prevFlyRef.current === key) return;
+    prevFlyRef.current = key;
+    const { x, y } = project(flyTarget[1], flyTarget[0]);
+    viewport.animate({ position: { x, y }, scale: 3, time: 800 });
+  }, [flyTarget, viewport]);
+
+  const hoveredName = hoveredId
+    ? features.find(f => f.regionId === hoveredId)?.name ?? hoveredId
+    : null;
+
   return (
-    <TileLayer
-      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
-      maxZoom={14}
-      minZoom={2}
-      eventHandlers={{ tileerror: () => setTilesFailed(true) }}
-    />
+    <>
+      <div
+        className="absolute inset-0"
+        onMouseMove={e => setMousePos({ x: e.clientX, y: e.clientY })}
+      />
+      {hoveredName && (
+        <div
+          className="pointer-events-none absolute z-[500] px-2 py-1 text-xs font-serif bg-panel border border-panelEdge/60 rounded shadow-paper text-ink whitespace-nowrap"
+          style={{ left: mousePos.x + 14, top: mousePos.y - 28 }}
+        >
+          {hoveredName}
+        </div>
+      )}
+      <BuildingMarkersOverlay viewport={viewport} />
+    </>
   );
 }
 
-function FlyToTarget({ lat, lng }: { lat: number; lng: number }) {
-  const map = useMap();
-  const prevKey = useRef('');
-  useEffect(() => {
-    const key = `${lat},${lng}`;
-    if (prevKey.current === key) return;
-    prevKey.current = key;
-    map.flyTo([lat, lng], 6, { duration: 1.5 });
-  }, [map, lat, lng]);
-  return null;
-}
-
 export function MapView({ geojson, adjacency = {}, flyTarget, mapMode, regionColors }: MapViewProps) {
-  const setSelectedRegion = useGameStore(s => s.setSelectedRegion);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const app = usePixiApp(canvasRef);
+  const viewport = usePixiViewport(app);
+
+  // Visual effects — created once when both app and viewport are ready
+  useEffect(() => {
+    if (!app || !viewport) return;
+    const ocean = new OceanLayer(app, viewport);
+    const clouds = new CloudLayer(app, viewport);
+    const vignette = new VignetteOverlay(app);
+    return () => {
+      ocean.destroy();
+      clouds.destroy();
+      vignette.destroy();
+    };
+  }, [app, viewport]);
 
   return (
-    <div className="relative w-full h-full" style={{ background: '#d9c89a' }}>
-      <MapContainer
-        center={[20, 0]}
-        zoom={3}
-        className="h-full w-full"
-        zoomControl={false}
-        attributionControl={true}
-        touchZoom={true}
-        bounceAtZoomLimits={false}
-        preferCanvas={true}
-      >
-        <TileLayerWithFallback />
-        <ZoomControl position="bottomleft" />
-        <ZoomController />
-        <RegionLayer
-          geojson={geojson ?? EMPTY_GEOJSON}
+    <div className="relative w-full h-full">
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+      {viewport && (
+        <MapCanvas
+          geojson={geojson}
           adjacency={adjacency}
-          onRegionClick={setSelectedRegion}
+          flyTarget={flyTarget}
           mapMode={mapMode}
           regionColors={regionColors}
+          viewport={viewport}
         />
-        {flyTarget && <FlyToTarget lat={flyTarget[0]} lng={flyTarget[1]} />}
-      </MapContainer>
+      )}
     </div>
   );
 }

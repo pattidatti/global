@@ -38,6 +38,9 @@ interface GameStore {
   pendingBuilds: Set<string>;     // regionIds
   pendingExpansions: Set<string>; // regionIds
 
+  // Notifications
+  unreadChat: boolean;
+
   // Actions
   setAuth: (uid: string, slotId: string, isTeacher: boolean, displayName?: string | null) => void;
   setGameId: (gameId: string) => void;
@@ -56,6 +59,7 @@ interface GameStore {
   setPendingHarvest: (buildingId: string, pending: boolean) => void;
   setPendingBuild: (regionId: string, pending: boolean) => void;
   setPendingExpansion: (regionId: string, pending: boolean) => void;
+  setUnreadChat: (v: boolean) => void;
   reset: () => void;
 }
 
@@ -78,6 +82,7 @@ const initialState = {
   pendingHarvests: new Set<string>(),
   pendingBuilds: new Set<string>(),
   pendingExpansions: new Set<string>(),
+  unreadChat: false,
 };
 
 export const useGameStore = create<GameStore>()(
@@ -119,6 +124,7 @@ export const useGameStore = create<GameStore>()(
           if (pending) next.add(regionId); else next.delete(regionId);
           return { pendingExpansions: next };
         }),
+      setUnreadChat: unreadChat => set({ unreadChat }),
       reset: () => set(initialState),
     }),
     {
