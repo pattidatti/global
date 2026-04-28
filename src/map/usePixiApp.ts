@@ -22,11 +22,13 @@ export function usePixiApp(canvasRef: RefObject<HTMLCanvasElement | null>): Appl
       autoDensity: true,
     }).then(() => {
       if (cancelled) {
-        pixiApp.destroy(false);
+        try { pixiApp.destroy(false); } catch { /* noop */ }
         return;
       }
       appRef.current = pixiApp;
       setApp(pixiApp);
+    }).catch(err => {
+      console.error('[usePixiApp] PixiJS init feilet:', err);
     });
 
     return () => {
