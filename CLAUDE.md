@@ -1,6 +1,6 @@
 # GEOPOLITY – Claude Code-instruksjoner
 
-Geopolitisk strategi-spill for klasserommet. React + TypeScript + Vite + Firebase RTDB + Leaflet.
+Geopolitisk strategi-spill for klasserommet. React + TypeScript + Vite + Firebase RTDB + Leaflet + Pixi.js.
 
 ## Kommandoer
 
@@ -11,12 +11,13 @@ npm run test:run         # Vitest én gang (CI-modus)
 npm test                 # Vitest watch-modus
 npm run lint             # ESLint
 npm run preview          # Forhåndsvis dist/
+npm run play             # Kjør spill-script mot emulator
 npm run build:regions    # Bygg regions.geojson + regions-meta.json fra rådata
 npm run build:adjacency  # Generer adjacency.json
 npm run seed             # Populer emulator/RTDB med NPC-regioner
 ```
 
-Deploy Cloud Functions etter endringer (Claude gjør dette, ikke brukeren):
+Deploy Cloud Functions etter endringer:
 ```bash
 cd functions && npm run build   # kompiler + kopier regions-meta.json til functions/data/
 firebase deploy --only functions
@@ -37,6 +38,8 @@ cd functions && npm run build     # Kompiler Cloud Functions (kreves før emuler
 - Klient skriver kun `displayName`, `lastSeenAt` direkte til RTDB
 - Alt annet (ressurser, regioner, ekspansjon) skjer via `httpsCallable` → Cloud Function → Admin SDK
 
+**Kart-rendering:** Leaflet håndterer GeoJSON-geometri og interaktivitet. Pixi.js (`RegionGraphicsLayer`, `usePixiApp`, `usePixiViewport`) brukes for GPU-akselerert regionfarging og visuelle effekter (skyer, hav, vignett) i `src/map/effects/`.
+
 **Viktig:** Cloud Functions MÅ bruke `firebase-admin` SDK (`functions/src/_db.ts`), aldri klient-SDK. RTDB-reglene har `.write: false` på alle kritiske noder.
 
 ## Nøkkelfiler
@@ -49,14 +52,20 @@ cd functions && npm run build     # Kompiler Cloud Functions (kreves før emuler
 | `src/firebase/db.ts` | Typed RTDB-subscriptions |
 | `src/firebase/auth.ts` | Google-auth (lærer) + anonym auth (elev) |
 | `src/firebase/config.ts` | Firebase-init (app, RTDB, auth, functions) |
+| `src/firebase/dev-emulators.ts` | Emulator-tilkobling for lokal utvikling |
 | `src/map/MapView.tsx` | Leaflet-init med `L.canvas()` renderer + OSM-fallback |
 | `src/map/RegionLayer.tsx` | GeoJSON-lag med Zustand-drevet styling |
+| `src/map/RegionGraphicsLayer.ts` | Pixi.js GPU-akselerert regionfarging |
+| `src/map/PickMapView.tsx` | Regionvalgskart ved spillstart |
+| `src/map/BuildingMarkersOverlay.tsx` | Bygningsmarkører på kartet |
+| `src/map/effects/{CloudLayer,OceanLayer,VignetteOverlay}.ts` | Visuelle effektlag (Pixi.js) |
 | `src/routes/{Login,ServerList,PickRegion,Teacher,Game}.tsx` | Toppnivå-ruter |
-| `src/screens/{MapScreen,MarketScreen,DiplomacyScreen,WarScreen}.tsx` | Aktive skjermer i `Game`-shell |
-| `src/features/{building,chat,diplomacy,expansion,nation,region,trade,war}/` | Domenespesifikk UI + klient-hooks |
-| `src/types/{game,player,region,nation,war,trade,diplomacy,chat}.ts` | TypeScript-typer per domene |
+| `src/screens/{MapScreen,MarketScreen,DiplomacyScreen,WarScreen,EventsScreen}.tsx` | Aktive skjermer i `Game`-shell |
+| `src/features/{building,chat,diplomacy,expansion,league,nation,region,teacher,trade,un,war}/` | Domenespesifikk UI + klient-hooks |
+| `src/types/{game,player,region,nation,war,trade,diplomacy,chat,league,un,teacherLog}.ts` | TypeScript-typer per domene |
 | `src/utils/production.ts` | Produksjonsberegninger (klient-speil av server) |
-| `src/ui/{tokens,Panel,TopBar,BottomNav,SchemaVersionBanner}.tsx` | Designsystem + chrome |
+| `src/utils/markerPlacement.ts` | Plassering av kartmarkører |
+| `src/ui/{tokens,Panel,FloatingPanel,TopBar,BottomNav,ResourceCounter,SchemaVersionBanner,OnboardingGuide,DevPanel}.tsx` | Designsystem + chrome |
 | `functions/src/game.ts` | createGame, joinGame, pickStartRegion, confirmEmpireColor |
 | `functions/src/teacher.ts` | Lærer-callable: freezeGame, resumeGame, endGame, deleteGame |
 | `functions/src/buildings.ts` | buildBuilding, cancelBuild, harvestBuilding |
@@ -65,32 +74,40 @@ cd functions && npm run build     # Kompiler Cloud Functions (kreves før emuler
 | `functions/src/market.ts` | proposeTrade, acceptTrade, cancelTrade |
 | `functions/src/diplomacy.ts` | proposeAlliance, acceptAlliance, breakAlliance, sendDiplomaticNote |
 | `functions/src/war.ts` | declareWar, deployUnits, proposeCeasefire, acceptCeasefire |
+| `functions/src/league.ts` | createLeague, inviteNationToLeague, acceptLeagueInvite, leaveLeague, dissolveLeague |
+| `functions/src/un.ts` | startUnMeeting, castUnVote, closeUnMeeting |
 | `functions/src/tick.ts` | Skedulert `macroTick` (hver 10. min) |
-| `functions/src/{nation-logic,market-logic,war-logic,diplomacy-logic}.ts` | Ren domenelogikk (testbar uten RTDB) |
+| `functions/src/{nation,market,war,diplomacy,buildings,expansion,tick,league,un,maintenance}-logic.ts` | Ren domenelogikk (testbar uten RTDB) |
 | `functions/src/_db.ts` | Admin SDK-init + typed refs |
+| `functions/src/dev.ts` | `triggerDevTick` – manuell tick for lokal testing |
 | `functions/src/index.ts` | Eksport-manifest for alle callables/scheduled |
 | `database.rules.json` | RTDB sikkerhetsregler |
 | `public/data/buildings.json` | Statisk bygningstabell (kostnad, produksjon, biom-multiplikatorer) |
 | `public/geo/{regions.geojson,regions-meta.json,adjacency.json}` | Regiongeometri, metadata, naboliste (~1,7 MB) |
 | `data/cultural-tags.json` | ISO-3166 → kulturgruppe-mapping |
-| `scripts/{build-regions,compute-adjacency,seed-firebase}.ts` | Datapipelinjer |
+| `scripts/{build-regions,compute-adjacency,seed-firebase,play}.ts` | Datapipelinjer + spillscript |
+| `e2e/playtest.spec.ts` | Playwright end-to-end-test |
 
 ## Datamodell (nøkkel-noder i RTDB)
 
 ```
-/games/{gameId}/meta                – GameMeta (status, teacherId, classCode, schemaVersion)
+/games/{gameId}/meta                – GameMeta (status, teacherId, classCode, schemaVersion, lastMacroTickAt)
 /games/{gameId}/roster/{slotId}     – RosterSlot (displayName, currentUid)
-/games/{gameId}/players/{slotId}    – Player (treasury, military, regionIds, empireColor)
+/games/{gameId}/players/{slotId}    – Player (treasury, military, regionIds, empireColor, lastMaintenanceCost)
 /games/{gameId}/regions/{regionId}  – Region (ownerId=slotId, integration, buildings, biome)
-/games/{gameId}/nations/{nationId}  – Nation (founderId, type, cultureMatch, members)
+/games/{gameId}/nations/{nationId}  – Nation (founderId, type, cultureMatch, members, leagueId)
 /games/{gameId}/wars/{warId}        – War (attacker, defender, contestedRegionIds, battleLog)
 /games/{gameId}/units/{unitId}      – Unit (strength, type, locationRegionId)
 /games/{gameId}/diplomacy/{a}_{b}   – Diplomacy (status, since, notes)
 /games/{gameId}/markets/{resource}  – orders + priceHistory
-/games/{gameId}/events/{eventId}    – Hendelseskort (Fase 3 placeholder)
-/games/{gameId}/chat/{channelId}    – Chat-meldinger
+/games/{gameId}/leagues/{leagueId}  – League (name, founderNationId, memberNationIds, pendingInvites)
+/games/{gameId}/unMeetings/{id}     – UnMeeting (agenda, options, votes, status)
+/games/{gameId}/events/{eventId}    – Hendelseskort
+/games/{gameId}/chat/{channelId}    – Chat-meldinger (global + 1:1 kanaler)
 /games/{gameId}/usedColors          – { colorIdx: slotId } atomisk reservasjon
+/games/{gameId}/teacher/log         – Lærers hendelseslogg
 /gamesByCode/{classCode}            – gameId (oppslagstabell)
+/serverList/{gameId}                – ServerListEntry (global spilliste)
 ```
 
 Alle disse nodene har `.write: false` i `database.rules.json` — kun Admin SDK (`functions/src/_db.ts`) skriver. Klienten skriver kun til `roster/{slotId}/displayName` og `players/{slotId}/lastSeenAt`.
@@ -121,37 +138,26 @@ VITE_FIREBASE_APP_ID=
 Vitest kjøres mot `src/**/*.test.ts` og `functions/src/**/*.test.ts`.
 Alle muterende Cloud Functions skal ha enhetstest FØR deploy.
 
-Nåværende testdekning:
-- `src/game/__tests__/empire-colors.test.ts` — distinkthet + golden-ratio-distribusjon
-- `functions/src/__tests__/`:
-  - `game.test.ts` — createGame, joinGame, klassekode-format
-  - `expansion.test.ts` — militær ekspansjon + integrering
-  - `buildings.test.ts` — kostnad, biom-multiplikatorer
-  - `market.test.ts` — order-matching, prisberegning
-  - `nation.test.ts` — 70%-kulturmatch, kontiguitet, nasjonsdanning
-  - `war.test.ts` — kampalgoritme, terreng-bonus, tap
-  - `diplomacy.test.ts` — alliansestatus, diplomatiske notater
-  - `tick.test.ts` — makro-tikkskedulering, tilstandsovergang
-  - `cultural-tags.test.ts` — datakurasjon, tag-validering
+**Unit-tester (`functions/src/__tests__/`):**
+- `game.test.ts` — createGame, joinGame, klassekode-format
+- `buildings.test.ts` — kostnad, biom-multiplikatorer
+- `expansion.test.ts` + `expansion-logic.test.ts` — militær ekspansjon + NPC-defeksjon
+- `nation.test.ts` — 70%-kulturmatch, kontiguitet, nasjonsdanning
+- `market.test.ts` — order-matching, prisberegning
+- `diplomacy.test.ts` — alliansestatus, diplomatiske notater
+- `war.test.ts` — kampalgoritme, terreng-bonus, tap
+- `tick.test.ts` — makro-tikkskedulering, tilstandsovergang
+- `league-logic.test.ts` — forbundsdanning, oppløsning
+- `un-logic.test.ts` — møteagenda-validering, stemmegivning
+- `maintenance-logic.test.ts` — vedlikeholdskostnader per tier
+- `cultural-tags.test.ts` — datakurasjon, tag-validering
+- `seed.test.ts` — region-seeding
 
-## Implementeringsfaser
+**Klient-tester (`src/game/__tests__/`):**
+- `empire-colors.test.ts` — distinkthet + golden-ratio-distribusjon
 
-Se `IMPLEMENTATION_PLAN.md` for full spesifikasjon. Status oppdatert 2026-04-26:
-
-- **Fase 0 (~95% ferdig):** Scaffolding, typer, Firebase-config, UI-shell, kart, empire-colors, Cloud Functions (createGame/joinGame/pickStartRegion/confirmEmpireColor), sikkerhetsregler, GitHub Actions, GeoJSON-pipeline (`public/geo/regions.geojson` ~1,7 MB), seed-script, kart-POC med faktiske regioner. Gjenstår: full seeding av kulturelle tagger til RTDB.
-- **Fase 1 (~100% ferdig):** Bygge/høste-system (`pendingHarvest` per bygning), `macroTick` hver 10. min (produksjon, byggekø, integrering, satisfaction, populasjon), militær ekspansjon med UI (`ExpandButton`), NPC frivillig tilslutning (`attractivenessThreshold` + `runNpcDefectionForGame`), diplomatisk overtakelse (`attemptDiplomaticTakeover`) og økonomisk investering (`investInRegion`) med UI (`NpcInfluencePanel`).
-- **Fase 2a (~70% ferdig):** `formNation` (≥70% kulturmatch) + `NationModal`, marked-callables + order-matching, diplomati-callables (allianser, notater) + `ChatPanel`, `DiplomacyForceGraph`. Gjenstår: UI-polish på `MarketScreen` og `DiplomacyForceGraph`.
-- **Fase 2b (~80% ferdig):** Krig-callables + kamp-logikk (`war-logic.ts`) + `Unit`-type + `WarScreen` + `UnitDeployPanel`, daily combat loop integrert i `macroTick` (`runCombatForGame`). Gjenstår: UI-polish.
-- **Fase 3 (delvis):** Forbund (`league.ts` callables + `LeaguePanel`) og FN (`un.ts` callables + `unClient`) er implementert. Gjenstår: hendelseskort.
-- **Fase 4 (ikke begynt):** Læringsrapporter, mobiloptimalisering, Economic Hitman.
-
-## Viktige avvik fra design.md (se §0 i IMPLEMENTATION_PLAN.md)
-
-- Kulturmatch-terskel for nasjonsdanning: **70%** (ikke 60%)
-- Empire-farge: bruker velger blant **6 ledige farger** ved `pickStartRegion` (atomisk reservasjon)
-- Mikro-tikk er **fjernet** — kun server-skedulert makro-tikk hvert 10. min
-- `pendingHarvest` per bygning (ikke aggregert produksjon per region)
-- **Schema-versjonsbanner:** klient viser `SchemaVersionBanner` ved mismatch mellom `meta.schemaVersion` og klient-konstant — ikke nevnt i design.md
+**E2E (`e2e/`):**
+- `playtest.spec.ts` — Playwright mot Firebase-emulatorer
 
 ## Norsk bokmål
 
