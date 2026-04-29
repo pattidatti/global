@@ -15,6 +15,7 @@ export function usePixiApp(canvasRef: RefObject<HTMLCanvasElement | null>): Appl
 
     void pixiApp.init({
       canvas,
+      preference: 'webgl',
       background: 0x0e7490,
       resizeTo: canvas.parentElement ?? canvas,
       antialias: true,
@@ -22,7 +23,7 @@ export function usePixiApp(canvasRef: RefObject<HTMLCanvasElement | null>): Appl
       autoDensity: true,
     }).then(() => {
       if (cancelled) {
-        try { pixiApp.destroy(false); } catch { /* noop */ }
+        try { pixiApp.destroy(true, { children: true, texture: true }); } catch { /* noop */ }
         return;
       }
       appRef.current = pixiApp;
@@ -33,13 +34,14 @@ export function usePixiApp(canvasRef: RefObject<HTMLCanvasElement | null>): Appl
 
     return () => {
       cancelled = true;
-      if (appRef.current) {
-        appRef.current.destroy(false);
-        appRef.current = null;
-        setApp(null);
+      const a = appRef.current;
+      appRef.current = null;
+      setApp(null);
+      if (a) {
+        try { a.destroy(true, { children: true, texture: true }); } catch { /* noop */ }
       } else {
         // Init er ikke ferdig ennå (StrictMode double-mount) — destruer via closure
-        try { pixiApp.destroy(false); } catch { /* noop */ }
+        try { pixiApp.destroy(true, { children: true, texture: true }); } catch { /* noop */ }
       }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

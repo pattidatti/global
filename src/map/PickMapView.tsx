@@ -37,9 +37,16 @@ export function PickMapView({ geojson, takenRegionIds, selectedRegionId, onRegio
 
   useEffect(() => {
     if (!app || !viewport) return;
-    const ocean = new OceanLayer(app, viewport);
-    const vignette = new VignetteOverlay(app);
-    return () => { ocean.destroy(); vignette.destroy(); };
+    let ocean: OceanLayer | null = null;
+    let vignette: VignetteOverlay | null = null;
+    try { ocean = new OceanLayer(app, viewport); }
+    catch (e) { console.error('[PickMapView] OceanLayer feilet', e); }
+    try { vignette = new VignetteOverlay(app); }
+    catch (e) { console.error('[PickMapView] VignetteOverlay feilet', e); }
+    return () => {
+      try { ocean?.destroy(); } catch { /* noop */ }
+      try { vignette?.destroy(); } catch { /* noop */ }
+    };
   }, [app, viewport]);
 
   void EMPTY_FEATURES;

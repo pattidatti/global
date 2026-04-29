@@ -6,6 +6,7 @@ import { useGameStore } from '../game/store';
 import { getEmpireColor } from '../game/empire-colors';
 import { subscribeToPlayer, subscribeToRegions } from '../firebase/db';
 import { PickMapView } from '../map/PickMapView';
+import { MapErrorBoundary } from '../ui/MapErrorBoundary';
 
 const EMPTY_GEOJSON: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
@@ -170,12 +171,14 @@ export function PickRegion() {
       </header>
 
       <div className="flex-1 relative">
-        <PickMapView
-          geojson={geojson}
-          takenRegionIds={takenRegionIds}
-          selectedRegionId={selectedRegionId}
-          onRegionClick={handleRegionClick}
-        />
+        <MapErrorBoundary label="Regionvalg-kartet">
+          <PickMapView
+            geojson={geojson}
+            takenRegionIds={takenRegionIds}
+            selectedRegionId={selectedRegionId}
+            onRegionClick={handleRegionClick}
+          />
+        </MapErrorBoundary>
 
         {(step === 'pick-color' || step === 'confirming') && (
           <div
