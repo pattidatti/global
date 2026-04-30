@@ -20,10 +20,11 @@ export function usePixiViewport(app: Application | null): Viewport | null {
     vp.clampZoom({ minScale: 0.18, maxScale: 12 });
 
     const center = project(0, 20);
-    const initScale = Math.min(
-      app.renderer.width / WORLD_WIDTH,
-      app.renderer.height / WORLD_HEIGHT,
-    ) * 1.1;
+    const w = app.renderer.width;
+    const h = app.renderer.height;
+    const initScale = (w > 0 && h > 0)
+      ? Math.min(w / WORLD_WIDTH, h / WORLD_HEIGHT) * 1.1
+      : 1.0;
     vp.setZoom(initScale, true);
     vp.moveCenter(center.x, center.y);
 
